@@ -10,7 +10,9 @@
     "axios": "^1.6.0",
     "stremio-addon-sdk": "^1.6.10",
     "srt-parser-2": "^1.1.7",
-    "pako": "^2.1.0"
+    "pako": "^2.1.0",
+    "jschardet": "^3.0.0",
+    "iconv-lite": "^0.6.3"
   },
   "engines": {
     "node": ">=14"

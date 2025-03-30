@@ -4,6 +4,8 @@ const { addonBuilder, serveHTTP } = require('stremio-addon-sdk');
 const axios = require('axios');
 const pako = require('pako');
 const { Buffer } = require('buffer');
+const jschardet = require('jschardet');
+const iconv = require('iconv-lite');
 
 // OpenSubtitles API base URL
 const OPENSUBS_API_URL = 'https://rest.opensubtitles.org';
@@ -174,66 +176,101 @@ async function fetchAndSelectSubtitle(languageId, baseSearchParams, isWebVersion
 
 // --- SRT Parsing and Merging Helpers ---
 
-// Fetches subtitle content from URL, handles potential gzip
+// Fetches subtitle content from URL, handles potential gzip and encoding
 async function fetchSubtitleContent(url) {
     console.log(`Fetching subtitle content from: ${url}`);
     try {
         const response = await axios.get(url, {
-            responseType: 'arraybuffer', // Important for binary data (like gzip)
-            timeout: 15000 // Increased timeout for downloading files
+            responseType: 'arraybuffer', // Important for binary data
+            timeout: 15000
         });
 
         let contentBuffer = Buffer.from(response.data);
         let subtitleText;
 
-        // Check if it's gzipped (based on common magic bytes or URL)
+        // 1. Handle Gzip decompression first
         if (url.endsWith('.gz') || (contentBuffer.length > 2 && contentBuffer[0] === 0x1f && contentBuffer[1] === 0x8b)) {
             console.log(`Decompressing gzipped subtitle: ${url}`);
             try {
-                const decompressed = pako.ungzip(contentBuffer);
-                subtitleText = Buffer.from(decompressed).toString('utf8');
-                 // Check for BOM in decompressed UTF8 text
-                 if(subtitleText.charCodeAt(0) === 0xFEFF) {
-                     console.log("Found BOM in decompressed text, removing it.");
-                     subtitleText = subtitleText.substring(1);
-                 }
+                contentBuffer = Buffer.from(pako.ungzip(contentBuffer)); // Decompress into a new buffer
+                console.log(`Decompressed size: ${contentBuffer.length}`);
             } catch (unzipError) {
-                 console.error(`Error decompressing subtitle ${url}: ${unzipError.message}`);
-                 return null; // Failed decompression
+                console.error(`Error decompressing subtitle ${url}: ${unzipError.message}`);
+                return null; // Failed decompression
             }
-        } else {
-             // Check for BOM in plain text
-             if(contentBuffer.length > 3 && contentBuffer[0] === 0xEF && contentBuffer[1] === 0xBB && contentBuffer[2] === 0xBF) {
-                 console.log("Found UTF-8 BOM, removing it.");
-                 contentBuffer = contentBuffer.subarray(3);
-             } else if(contentBuffer.length > 2 && contentBuffer[0] === 0xFE && contentBuffer[1] === 0xFF) {
-                 console.log("Found UTF-16 BE BOM, attempting conversion (best effort).");
-                 // Very basic UTF-16BE to UTF-8 assuming ASCII subset - proper conversion is complex
-                 subtitleText = contentBuffer.toString('utf16le'); // Often misidentified, try LE first
-                 console.warn("Attempted UTF-16 BE conversion, results may vary.")
-                 // TODO: Need robust multi-encoding handling
-             } else if(contentBuffer.length > 2 && contentBuffer[0] === 0xFF && contentBuffer[1] === 0xFE) {
-                 console.log("Found UTF-16 LE BOM, converting to UTF-8.");
-                 subtitleText = contentBuffer.toString('utf16le');
-             }
-
-             // If not already converted from UTF-16, try decoding
-             if (!subtitleText) {
-                 try {
-                     subtitleText = contentBuffer.toString('utf8');
-                     // Quick check for common UTF-8 replacement character indicating wrong encoding
-                     if (subtitleText.includes('\uFFFD')) { // Use Unicode escape
-                         console.warn(`Potential UTF-8 decoding issue for ${url}. Trying latin1.`);
-                         subtitleText = contentBuffer.toString('latin1');
-                     }
-                 } catch (decodeError) {
-                     console.warn(`Error decoding subtitle ${url} as UTF-8, trying latin1: ${decodeError.message}`);
-                     subtitleText = contentBuffer.toString('latin1'); // Fallback for other encodings
-                 }
-             }
         }
+
+        // 2. Detect Encoding
+        let detectedEncoding = 'utf8'; // Default
+        try {
+            const detected = jschardet.detect(contentBuffer);
+            if (detected && detected.encoding && detected.confidence > 0.8) { // Use if confidence is high
+                // Map common names/aliases if needed
+                switch (detected.encoding.toLowerCase()) {
+                    case 'windows-1254': // Common Turkish encoding
+                        detectedEncoding = 'win1254';
+                        break;
+                    case 'iso-8859-9': // Another common Turkish encoding
+                        detectedEncoding = 'iso88599';
+                        break;
+                    case 'utf-16le':
+                        detectedEncoding = 'utf16le';
+                        break;
+                    case 'utf-16be':
+                        detectedEncoding = 'utf16be';
+                        break;
+                    case 'ascii':
+                        detectedEncoding = 'utf8'; // Treat ASCII as UTF-8
+                        break;
+                    case 'utf-8':
+                    case 'utf8':
+                         detectedEncoding = 'utf8';
+                         break;
+                    // Add more mappings if necessary based on jschardet results
+                    default:
+                        detectedEncoding = detected.encoding;
+                }
+                console.log(`Detected encoding: ${detected.encoding} (confidence: ${detected.confidence.toFixed(2)}), using: ${detectedEncoding}`);
+            } else {
+                console.log(`Encoding detection confidence low or failed for ${url}. Defaulting to UTF-8.`);
+                // Try to remove potential BOM manually if UTF-8 is assumed
+                if(contentBuffer.length > 3 && contentBuffer[0] === 0xEF && contentBuffer[1] === 0xBB && contentBuffer[2] === 0xBF) {
+                    console.log("Found UTF-8 BOM, removing it before potential decode.");
+                    contentBuffer = contentBuffer.subarray(3);
+                }
+            }
+        } catch (detectionError) {
+            console.warn(`Error during encoding detection for ${url}: ${detectionError.message}. Defaulting to UTF-8.`);
+        }
+
+        // 3. Decode using detected or default encoding
+        try {
+            // iconv-lite handles BOMs for UTF-8, UTF-16LE, UTF-16BE automatically
+            subtitleText = iconv.decode(contentBuffer, detectedEncoding);
+            console.log(`Successfully decoded subtitle ${url} using ${detectedEncoding}.`);
+
+            // Optional: If it was detected as UTF-8, double check for the FEFF char code just in case
+            // iconv *should* handle this, but as a safeguard:
+            if (detectedEncoding === 'utf8' && subtitleText.charCodeAt(0) === 0xFEFF) {
+                 console.log("Found BOM character after UTF-8 decode, removing it.");
+                 subtitleText = subtitleText.substring(1);
+            }
+
+        } catch (decodeError) {
+            console.error(`Error decoding subtitle ${url} with encoding ${detectedEncoding}: ${decodeError.message}`);
+            // Fallback attempt: try decoding as Latin1 (ISO-8859-1) if initial decode failed
+            console.warn(`Falling back to latin1 decoding for ${url}`);
+            try {
+                 subtitleText = iconv.decode(contentBuffer, 'latin1');
+            } catch (fallbackError) {
+                console.error(`Fallback decoding as latin1 also failed for ${url}: ${fallbackError.message}`);
+                return null; // Both attempts failed
+            }
+        }
+
         console.log(`Successfully fetched and processed subtitle: ${url}`);
         return subtitleText;
+
     } catch (error) {
         console.error(`Error fetching subtitle content from ${url}:`, error.message);
         if (error.response) {
