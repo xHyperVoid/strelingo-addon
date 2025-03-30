@@ -367,8 +367,8 @@ function mergeSubtitles(mainSubs, transSubs, mergeThresholdMs = 500) {
             const bestTransSub = transSubs[bestMatchIndex];
             mergedSubs.push({
                 ...mainSub, // Keep main timing and ID
-                // Combine text using standard newline (\n), making translation bold
-                text: `${mainSub.text}\n<b>${bestTransSub.text}</b>`
+                // Combine text using standard newline (\n), making translation italic
+                text: `${mainSub.text}\n<i>${bestTransSub.text}</i>`
             });
         } else {
             // If no suitable translation match found, add the main subtitle as is
