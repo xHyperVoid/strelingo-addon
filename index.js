@@ -61,12 +61,6 @@ const builder = new addonBuilder({
             options: ['eng', 'tur', 'spa', 'fra', 'deu', 'ita', 'por'],
             required: true,
             default: 'tur'
-        },
-        {
-            key: 'transColor',
-            type: 'text',
-            title: 'Translation Text Color (e.g., yellow, #FFFF00)',
-            default: 'yellow'
         }
     ]
 });
@@ -302,9 +296,9 @@ function parseTimeToMs(timeString) {
     return (hours * 3600 + minutes * 60 + seconds) * 1000 + milliseconds;
 }
 
-// Merges two arrays of parsed subtitles based on time, applying color to translation
-function mergeSubtitles(mainSubs, transSubs, mergeThresholdMs = 500, transColor = 'yellow') {
-    console.log(`Merging ${mainSubs.length} main subs with ${transSubs.length} translation subs. Color: ${transColor}`);
+// Merges two arrays of parsed subtitles based on time
+function mergeSubtitles(mainSubs, transSubs, mergeThresholdMs = 500) {
+    console.log(`Merging ${mainSubs.length} main subs with ${transSubs.length} translation subs.`);
     const mergedSubs = [];
     let transIndex = 0;
 
@@ -371,12 +365,10 @@ function mergeSubtitles(mainSubs, transSubs, mergeThresholdMs = 500, transColor 
         // Process the best match found (if any)
         if (bestMatchIndex !== -1) {
             const bestTransSub = transSubs[bestMatchIndex];
-            // Wrap the translation text with the font color tag
-            const coloredTransText = `<font color="${transColor}">${bestTransSub.text}</font>`;
             mergedSubs.push({
                 ...mainSub, // Keep main timing and ID
-                // Combine text using standard newline (\n), with colored translation
-                text: `${mainSub.text}\n${coloredTransText}` // Use the colored text
+                // Combine text using standard newline (\n), making translation bold
+                text: `${mainSub.text}\n<b>${bestTransSub.text}</b>`
             });
         } else {
             // If no suitable translation match found, add the main subtitle as is
@@ -492,13 +484,12 @@ process.on('SIGINT', () => {
             console.log('Dual Subtitle request:', { type, id, extra });
             console.log('Config:', config);
 
-            // Get selected languages and color from config, with defaults
+            // Get selected languages from config, with defaults
             const mainLang = config?.mainLang || 'eng';
             const transLang = config?.transLang || 'tur';
-            const transColor = config?.transColor || 'yellow'; // Get color, default to yellow
             const isWebVersion = config?.version === 'web';
 
-            console.log(`Selected Languages: Main=${mainLang}, Translation=${transLang}, Color=${transColor}`);
+            console.log(`Selected Languages: Main=${mainLang}, Translation=${transLang}`);
             console.log(`Using ${isWebVersion ? 'WEB' : 'DESKTOP'} version settings.`);
 
             // Parse the IMDB ID
@@ -624,8 +615,8 @@ process.on('SIGINT', () => {
                  }
 
                  console.log("Merging subtitles...");
-                 // Call mergeSubtitles, passing the color from config
-                 const mergedParsed = mergeSubtitles(mainParsed, transParsed, 500, transColor);
+                 // Call mergeSubtitles (defined outside IIFE)
+                 const mergedParsed = mergeSubtitles(mainParsed, transParsed);
 
                  if (!mergedParsed || mergedParsed.length === 0) {
                      console.error("Merging resulted in empty subtitles.");
