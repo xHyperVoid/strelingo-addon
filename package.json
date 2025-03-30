@@ -1,0 +1,21 @@
+{
+  "name": "turkish-subtitles-addon",
+  "version": "0.0.1",
+  "description": "Stremio addon for Turkish subtitles from OpenSubtitles",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "nodemon index.js"
+  },
+  "dependencies": {
+    "stremio-addon-sdk": "^1.6.10",
+    "node-fetch": "^2.6.7",
+    "axios": "^1.4.0"
+  },
+  "devDependencies": {
+    "nodemon": "^2.0.22"
+  },
+  "engines": {
+    "node": ">=14.0.0"
+  }
+} 
