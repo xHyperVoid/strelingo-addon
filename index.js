@@ -342,28 +342,6 @@ function mergeSubtitles(mainSubs, transSubs, mergeThresholdMs = 500) {
     return mergedSubs;
 }
 
-// Formats an array of subtitle objects back into SRT text
-function formatSrt(subtitleArray) {
-    if (!Array.isArray(subtitleArray)) {
-         console.error("Invalid input to formatSrt: not an array.");
-         return null;
-    }
-    try {
-        const parser = new SRTParser2();
-        // Ensure IDs are sequential numbers as strings, as required by srt-parser-2
-        const sanitizedArray = subtitleArray.map((sub, index) => ({
-             ...sub,
-             id: (index + 1).toString()
-         }));
-        return parser.toSrt(sanitizedArray);
-    } catch (error) {
-        console.error('Error formatting SRT:', error.message);
-        // Log the problematic structure if possible
-        console.error('Problematic data for formatSrt:', JSON.stringify(subtitleArray.slice(0, 5)));
-        return null;
-    }
-}
-
 // Helper function to build the OpenSubtitles search URL
 function buildSearchUrl(params) {
     // For series, we need a specific order: episode/imdbid/season/sublanguageid
@@ -401,6 +379,28 @@ process.on('SIGINT', () => {
         console.log("Successfully imported srt-parser-2.");
 
         // --- Parser Dependent Helpers (Define inside IIFE) ---
+
+        // Formats an array of subtitle objects back into SRT text
+        function formatSrt(subtitleArray) {
+            if (!Array.isArray(subtitleArray)) {
+                 console.error("Invalid input to formatSrt: not an array.");
+                 return null;
+            }
+            try {
+                const parser = new SRTParser2();
+                // Ensure IDs are sequential numbers as strings, as required by srt-parser-2
+                const sanitizedArray = subtitleArray.map((sub, index) => ({
+                     ...sub,
+                     id: (index + 1).toString()
+                }));
+                return parser.toSrt(sanitizedArray);
+            } catch (error) {
+                console.error('Error formatting SRT:', error.message);
+                // Log the problematic structure if possible
+                console.error('Problematic data for formatSrt:', JSON.stringify(subtitleArray.slice(0, 5)));
+                return null;
+            }
+        }
 
         // Parses SRT text into an array of objects
         function parseSrt(srtText) {
