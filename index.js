@@ -2,9 +2,8 @@
 
 const { addonBuilder, serveHTTP } = require('stremio-addon-sdk');
 const axios = require('axios');
-const SRTParser2 = require('srt-parser-2').default; // Import the parser
-const pako = require('pako'); // Import pako for gzip decompression
-const { Buffer } = require('buffer'); // Needed for Base64 encoding
+const pako = require('pako');
+const { Buffer } = require('buffer');
 
 // OpenSubtitles API base URL
 const OPENSUBS_API_URL = 'https://rest.opensubtitles.org';
@@ -244,147 +243,104 @@ async function fetchSubtitleContent(url) {
     }
 }
 
-// Parses SRT text into an array of objects
-function parseSrt(srtText) {
-    if (!srtText || typeof srtText !== 'string') {
-         console.error("Invalid input to parseSrt: not a string or empty.");
-         return null;
+// Helper to convert SRT time format (HH:MM:SS,ms) to milliseconds
+function parseTimeToMs(timeString) {
+    // Added validation for the time string format
+    if (!timeString || !/\d{2}:\d{2}:\d{2},\d{3}/.test(timeString)) {
+        console.error(`Invalid time format encountered: ${timeString}`);
+        return 0; // Return 0 or throw error, depending on desired strictness
     }
-    try {
-        const parser = new SRTParser2();
-        // Pre-process: remove BOM if present (should be handled by fetch, but double-check)
-        if(srtText.charCodeAt(0) === 0xFEFF) {
-             console.log("Found BOM in parseSrt, removing it.");
-             srtText = srtText.substring(1);
-        }
-        // Pre-process: normalize line endings
-        srtText = srtText.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
-
-        const subtitles = parser.fromSrt(srtText);
-
-        if (!Array.isArray(subtitles)) {
-             console.error("Parsing did not return an array.");
-             return null;
-        }
-         if (subtitles.length === 0 && srtText.trim().length > 0) {
-             console.warn("Parsing resulted in an empty array despite non-empty input.");
-             // Maybe log problematic text again?
-             // console.error('Problematic SRT for empty parse:
-
-             return null; // Treat as parse failure if input wasn't just whitespace
-         }
-         if (subtitles.length > 0 && (!subtitles[0].startTime || !subtitles[0].text)) {
-             console.warn("Parsed structure seems invalid (missing startTime or text in first entry).");
-             return null;
-         }
-
-        console.log(`Parsed ${subtitles.length} subtitle entries.`);
-        return subtitles;
-    } catch (error) {
-        console.error('Error parsing SRT:', error.message);
-        console.error('Problematic SRT start:\n' + srtText.substring(0, 300)); // Log start of text
-        return null;
-    }
+    const parts = timeString.split(':');
+    const secondsParts = parts[2].split(',');
+    const hours = parseInt(parts[0], 10);
+    const minutes = parseInt(parts[1], 10);
+    const seconds = parseInt(secondsParts[0], 10);
+    const milliseconds = parseInt(secondsParts[1], 10);
+    return (hours * 3600 + minutes * 60 + seconds) * 1000 + milliseconds;
 }
 
 // Merges two arrays of parsed subtitles based on time
- function mergeSubtitles(mainSubs, transSubs, mergeThresholdMs = 500) {
-     console.log(`Merging ${mainSubs.length} main subs with ${transSubs.length} translation subs.`);
-     const mergedSubs = [];
-     let transIndex = 0;
+function mergeSubtitles(mainSubs, transSubs, mergeThresholdMs = 500) {
+    console.log(`Merging ${mainSubs.length} main subs with ${transSubs.length} translation subs.`);
+    const mergedSubs = [];
+    let transIndex = 0;
 
-     for (const mainSub of mainSubs) {
-         let foundMatch = false;
-         let bestMatchIndex = -1;
-         let smallestTimeDiff = Infinity;
+    for (const mainSub of mainSubs) {
+        let foundMatch = false;
+        let bestMatchIndex = -1;
+        let smallestTimeDiff = Infinity;
 
-         // Ensure mainSub is valid before processing
-         if (!mainSub || !mainSub.startTime || !mainSub.endTime) {
-             console.warn("Skipping invalid main subtitle entry:", mainSub);
-             continue;
-         }
+        // Ensure mainSub is valid before processing
+        if (!mainSub || !mainSub.startTime || !mainSub.endTime) {
+            console.warn("Skipping invalid main subtitle entry:", mainSub);
+            continue;
+        }
 
-         const mainStartTime = parseTimeToMs(mainSub.startTime);
-         const mainEndTime = parseTimeToMs(mainSub.endTime);
+        const mainStartTime = parseTimeToMs(mainSub.startTime);
+        const mainEndTime = parseTimeToMs(mainSub.endTime);
 
-         // Search for the best matching translation subtitle around the main subtitle's time
-         for (let i = transIndex; i < transSubs.length; i++) {
-             const transSub = transSubs[i];
+        // Search for the best matching translation subtitle around the main subtitle's time
+        for (let i = transIndex; i < transSubs.length; i++) {
+            const transSub = transSubs[i];
 
-             // Ensure transSub is valid
-             if (!transSub || !transSub.startTime || !transSub.endTime) {
-                 console.warn("Skipping invalid translation subtitle entry:", transSub);
-                 continue;
-             }
+            // Ensure transSub is valid
+            if (!transSub || !transSub.startTime || !transSub.endTime) {
+                console.warn("Skipping invalid translation subtitle entry:", transSub);
+                continue;
+            }
 
-             const transStartTime = parseTimeToMs(transSub.startTime);
-             const transEndTime = parseTimeToMs(transSub.endTime);
+            const transStartTime = parseTimeToMs(transSub.startTime);
+            const transEndTime = parseTimeToMs(transSub.endTime);
 
-             // Check for time overlap or closeness
-             const startsOverlap = (transStartTime >= mainStartTime && transStartTime < mainEndTime);
-             const endsOverlap = (transEndTime > mainStartTime && transEndTime <= mainEndTime);
-             const isWithin = (transStartTime >= mainStartTime && transEndTime <= mainEndTime);
-             const contains = (transStartTime < mainStartTime && transEndTime > mainEndTime);
-             const timeDiff = Math.abs(mainStartTime - transStartTime); // Proximity of start times
+            // Check for time overlap or closeness
+            const startsOverlap = (transStartTime >= mainStartTime && transStartTime < mainEndTime);
+            const endsOverlap = (transEndTime > mainStartTime && transEndTime <= mainEndTime);
+            const isWithin = (transStartTime >= mainStartTime && transEndTime <= mainEndTime);
+            const contains = (transStartTime < mainStartTime && transEndTime > mainEndTime);
+            const timeDiff = Math.abs(mainStartTime - transStartTime); // Proximity of start times
 
-             // Prioritize overlaps, then proximity
-             if (startsOverlap || endsOverlap || isWithin || contains || timeDiff < mergeThresholdMs) {
-                 // This sub is a potential match. Find the *closest* start time.
-                 if (timeDiff < smallestTimeDiff) {
-                     smallestTimeDiff = timeDiff;
-                     bestMatchIndex = i;
-                     // Don't break yet, keep searching for potentially *better* overlaps nearby
-                 }
-                 foundMatch = true; // Mark that we found at least one potential match
-             } else if (foundMatch && transStartTime > mainEndTime + mergeThresholdMs) {
-                 // If we already found a match, and this trans sub starts significantly
-                 // after the main sub ends, we can stop searching for this main sub.
+            // Prioritize overlaps, then proximity
+            if (startsOverlap || endsOverlap || isWithin || contains || timeDiff < mergeThresholdMs) {
+                // This sub is a potential match. Find the *closest* start time.
+                if (timeDiff < smallestTimeDiff) {
+                    smallestTimeDiff = timeDiff;
+                    bestMatchIndex = i;
+                    // Don't break yet, keep searching for potentially *better* overlaps nearby
+                }
+                foundMatch = true; // Mark that we found at least one potential match
+            } else if (foundMatch && transStartTime > mainEndTime + mergeThresholdMs) {
+                // If we already found a match, and this trans sub starts significantly
+                // after the main sub ends, we can stop searching for this main sub.
+                break;
+            } else if (!foundMatch && transStartTime > mainEndTime + mergeThresholdMs) {
+                 // If we haven't found any match yet, and this one is too far after,
+                 // we can likely stop searching for this main sub.
                  break;
-             } else if (!foundMatch && transStartTime > mainEndTime + mergeThresholdMs) {
-                  // If we haven't found any match yet, and this one is too far after,
-                  // we can likely stop searching for this main sub.
-                  break;
-              }
-
-             // Optimization: If this translation sub ends way before the main sub *starts*,
-             // advance the starting point for the *next* main sub's search.
-             if (transEndTime < mainStartTime - mergeThresholdMs * 2 && i === transIndex) {
-                 transIndex = i + 1;
              }
-         }
 
-         // Process the best match found (if any)
-         if (bestMatchIndex !== -1) {
-             const bestTransSub = transSubs[bestMatchIndex];
-             mergedSubs.push({
-                 ...mainSub, // Keep main timing and ID
-                 // Combine text using standard newline (\n)
-                 text: `${mainSub.text}\n${bestTransSub.text}`
-             });
-         } else {
-             // If no suitable translation match found, add the main subtitle as is
-             mergedSubs.push(mainSub);
-         }
-     }
-     console.log(`Finished merging. Result has ${mergedSubs.length} entries.`);
-     return mergedSubs;
- }
+            // Optimization: If this translation sub ends way before the main sub *starts*,
+            // advance the starting point for the *next* main sub's search.
+            if (transEndTime < mainStartTime - mergeThresholdMs * 2 && i === transIndex) {
+                transIndex = i + 1;
+            }
+        }
 
- // Helper to convert SRT time format (HH:MM:SS,ms) to milliseconds
- function parseTimeToMs(timeString) {
-     // Added validation for the time string format
-     if (!timeString || !/\d{2}:\d{2}:\d{2},\d{3}/.test(timeString)) {
-         console.error(`Invalid time format encountered: ${timeString}`);
-         return 0; // Return 0 or throw error, depending on desired strictness
-     }
-     const parts = timeString.split(':');
-     const secondsParts = parts[2].split(',');
-     const hours = parseInt(parts[0], 10);
-     const minutes = parseInt(parts[1], 10);
-     const seconds = parseInt(secondsParts[0], 10);
-     const milliseconds = parseInt(secondsParts[1], 10);
-     return (hours * 3600 + minutes * 60 + seconds) * 1000 + milliseconds;
- }
+        // Process the best match found (if any)
+        if (bestMatchIndex !== -1) {
+            const bestTransSub = transSubs[bestMatchIndex];
+            mergedSubs.push({
+                ...mainSub, // Keep main timing and ID
+                // Combine text using standard newline (\n)
+                text: `${mainSub.text}\n${bestTransSub.text}`
+            });
+        } else {
+            // If no suitable translation match found, add the main subtitle as is
+            mergedSubs.push(mainSub);
+        }
+    }
+    console.log(`Finished merging. Result has ${mergedSubs.length} entries.`);
+    return mergedSubs;
+}
 
 // Formats an array of subtitle objects back into SRT text
 function formatSrt(subtitleArray) {
@@ -407,183 +363,6 @@ function formatSrt(subtitleArray) {
         return null;
     }
 }
-
-// --- End Helpers ---
-
-// Define the subtitles handler
-builder.defineSubtitlesHandler(async ({ type, id, extra, config }) => {
-    console.log('Dual Subtitle request:', { type, id, extra });
-    console.log('Config:', config);
-
-    // Get selected languages from config, with defaults
-    const mainLang = config?.mainLang || 'eng';
-    const transLang = config?.transLang || 'tur';
-    const isWebVersion = config?.version === 'web';
-
-    console.log(`Selected Languages: Main=${mainLang}, Translation=${transLang}`);
-    console.log(`Using ${isWebVersion ? 'WEB' : 'DESKTOP'} version settings.`);
-
-    // Parse the IMDB ID
-    let imdbId = extra?.imdbId || id;
-    let season = extra?.season;
-    let episode = extra?.episode;
-
-    // Handle combined series ID format (e.g., tt12345:1:2)
-    if (imdbId.includes(':')) {
-        const parts = imdbId.split(':');
-        imdbId = parts[0];
-        if (parts.length >= 3) {
-            season = season || parts[1];
-            episode = episode || parts[2];
-        }
-    }
-
-    if (!imdbId || !imdbId.startsWith('tt')) {
-        console.log('No valid IMDB ID provided');
-        return { subtitles: [] };
-    }
-
-    // Prepare base search parameters (without language)
-    const baseSearchParams = {
-        imdbid: imdbId.replace('tt', '')
-    };
-    if (type === 'series' && season && episode) {
-        baseSearchParams.season = season;
-        baseSearchParams.episode = episode;
-    }
-
-    try {
-        // Fetch subtitles metadata for both languages concurrently
-        console.log("Fetching subtitle metadata for both languages...");
-        const [mainSubInfo, transSubInfo] = await Promise.all([
-            fetchAndSelectSubtitle(mainLang, baseSearchParams, isWebVersion),
-            fetchAndSelectSubtitle(transLang, baseSearchParams, isWebVersion)
-        ]);
-
-        // Check if we got metadata for both
-        if (!mainSubInfo || !transSubInfo) {
-             console.log("Could not find subtitle metadata for both requested languages.");
-             // Try returning only main if found
-             if (mainSubInfo?.url) {
-                  console.warn("Could not get translation metadata. Attempting to return only main subtitle.");
-                  const mainContentAlone = await fetchSubtitleContent(mainSubInfo.url);
-                  if (mainContentAlone) {
-                      const mainDataUriAlone = `data:application/x-subrip;base64,${Buffer.from(mainContentAlone).toString('base64')}`;
-                      return {
-                         subtitles: [{
-                             id: mainSubInfo.id,
-                             url: mainDataUriAlone,
-                             lang: mainLang,
-                             name: `[${mainLang.toUpperCase()}] ${mainSubInfo.releaseName || 'Main Subtitle'} (No Translation Found)`
-                          }],
-                         cacheMaxAge: 3600
-                      };
-                  }
-             }
-             return { subtitles: [], cacheMaxAge: 60 }; // Cache failure briefly
-        }
-
-        console.log(`Selected Main Subtitle (${mainLang}): ID=${mainSubInfo.id}, Lang=${mainSubInfo.langName}, Rating=${mainSubInfo.rating}, Format=${mainSubInfo.format}, URL=${mainSubInfo.url}`);
-        console.log(`Selected Translation Subtitle (${transLang}): ID=${transSubInfo.id}, Lang=${transSubInfo.langName}, Rating=${transSubInfo.rating}, Format=${transSubInfo.format}, URL=${transSubInfo.url}`);
-
-         // --- Fetch Content, Parse, Merge ---
-         console.log("Fetching subtitle content...");
-         const [mainSubContent, transSubContent] = await Promise.all([
-             fetchSubtitleContent(mainSubInfo.url),
-             fetchSubtitleContent(transSubInfo.url)
-         ]);
-
-         if (!mainSubContent || !transSubContent) {
-             console.error("Failed to fetch content for one or both subtitles.");
-              // Try returning only main if content available
-              if (mainSubContent && mainSubInfo?.url) {
-                   console.warn("Failed to fetch translation content. Returning only main subtitle.");
-                   const mainDataUriAlone = `data:application/x-subrip;base64,${Buffer.from(mainSubContent).toString('base64')}`;
-                   return {
-                      subtitles: [{
-                          id: mainSubInfo.id,
-                          url: mainDataUriAlone,
-                          lang: mainLang,
-                          name: `[${mainLang.toUpperCase()}] ${mainSubInfo.releaseName || 'Main Subtitle'} (Translation Fetch Failed)`
-                       }],
-                      cacheMaxAge: 3600
-                   };
-              }
-             return { subtitles: [], cacheMaxAge: 60 };
-         }
-
-         console.log("Parsing subtitles...");
-         if (mainSubInfo.format?.toLowerCase() !== 'srt' || transSubInfo.format?.toLowerCase() !== 'srt') {
-             console.warn(`One or both subtitles are not SRT (${mainSubInfo.format}, ${transSubInfo.format}). Merging assumes SRT structure. Results may be inaccurate.`);
-             // Future: Add conversion logic here if possible (e.g., simple VTT->SRT)
-         }
-
-         const mainParsed = parseSrt(mainSubContent);
-         const transParsed = parseSrt(transSubContent);
-
-         if (!mainParsed || !transParsed) {
-             console.error("Failed to parse one or both subtitles.");
-              if (mainParsed && mainSubInfo?.url) {
-                  console.warn("Translation subtitle failed parsing. Returning only the main subtitle.");
-                    // We already have the content, format it back to ensure consistency if needed, or use original
-                    const formattedMain = formatSrt(mainParsed); // Re-format to ensure valid SRT
-                    if (formattedMain) {
-                         const mainSubDataUri = `data:application/x-subrip;base64,${Buffer.from(formattedMain).toString('base64')}`;
-                         return {
-                             subtitles: [{
-                                 id: mainSubInfo.id,
-                                 url: mainSubDataUri,
-                                 lang: mainLang,
-                                 name: `[${mainLang.toUpperCase()}] ${mainSubInfo.releaseName || 'Main Subtitle'} (Translation Parse Failed)`
-                              }],
-                             cacheMaxAge: 3600
-                          };
-                    } else {
-                         console.error("Failed to re-format main subtitle after translation parse failure.");
-                    }
-              }
-             return { subtitles: [], cacheMaxAge: 60 };
-         }
-
-         console.log("Merging subtitles...");
-         const mergedParsed = mergeSubtitles(mainParsed, transParsed);
-
-         if (!mergedParsed || mergedParsed.length === 0) {
-             console.error("Merging resulted in empty subtitles.");
-             // Optionally return main subtitle as fallback here too?
-             return { subtitles: [], cacheMaxAge: 60 };
-         }
-
-         console.log("Formatting merged subtitles to SRT...");
-         const mergedSrtString = formatSrt(mergedParsed);
-
-         if (!mergedSrtString) {
-             console.error("Failed to format merged subtitles back to SRT.");
-              // Optionally return main subtitle as fallback here too?
-             return { subtitles: [], cacheMaxAge: 60 };
-         }
-
-         console.log("Creating Data URI for merged subtitles...");
-         const mergedSubDataUri = `data:application/x-subrip;base64,${Buffer.from(mergedSrtString).toString('base64')}`;
-
-         // Return the single merged subtitle entry
-         return {
-             subtitles: [{
-                 id: `merged-${mainSubInfo.id}-${transSubInfo.id}`,
-                 url: mergedSubDataUri,
-                 lang: `${mainLang}+${transLang}`, // Custom lang code for dual subs
-                 name: `[${mainLang.toUpperCase()}/${transLang.toUpperCase()}] Dual Subtitle` // Clearer name
-             }],
-             cacheMaxAge: 6 * 3600, // Cache for 6 hours
-             staleRevalidate: 24 * 3600 // Allow stale for 1 day
-         };
-         // --- End Merging Logic ---
-
-    } catch (error) {
-        console.error('Error in subtitle handler:', error.message, error.stack); // Log stack trace
-        return { subtitles: [], cacheMaxAge: 60 }; // Cache failure briefly
-    }
-});
 
 // Helper function to build the OpenSubtitles search URL
 function buildSearchUrl(params) {
@@ -614,9 +393,240 @@ process.on('SIGINT', () => {
     process.exit(0);
 });
 
-// Serve the addon
-serveHTTP(builder.getInterface(), { port: ADDON_PORT });
+// --- Main Async IIFE to handle ESM import and setup ---
+(async () => {
+    try {
+        // Dynamically import the ESM module
+        const { default: SRTParser2 } = await import('srt-parser-2');
+        console.log("Successfully imported srt-parser-2.");
 
-console.log(`Dual Language Subtitles Addon running at ${ADDON_URL}/manifest.json`);
-console.log(`To install in Stremio, open: stremio://addon/${encodeURIComponent(ADDON_URL)}/manifest.json`);
-console.log(`After installation, click the "Configure" button to select Main and Translation languages.`); 
+        // --- Parser Dependent Helpers (Define inside IIFE) ---
+
+        // Parses SRT text into an array of objects
+        function parseSrt(srtText) {
+            if (!srtText || typeof srtText !== 'string') {
+                 console.error("Invalid input to parseSrt: not a string or empty.");
+                 return null;
+            }
+            try {
+                const parser = new SRTParser2();
+                // Pre-process: remove BOM if present (should be handled by fetch, but double-check)
+                if(srtText.charCodeAt(0) === 0xFEFF) {
+                     console.log("Found BOM in parseSrt, removing it.");
+                     srtText = srtText.substring(1);
+                }
+                // Pre-process: normalize line endings
+                srtText = srtText.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+
+                const subtitles = parser.fromSrt(srtText);
+
+                if (!Array.isArray(subtitles)) {
+                     console.error("Parsing did not return an array.");
+                     return null;
+                }
+                 if (subtitles.length === 0 && srtText.trim().length > 0) {
+                     console.warn("Parsing resulted in an empty array despite non-empty input.");
+                     return null; // Treat as parse failure if input wasn't just whitespace
+                 }
+                 if (subtitles.length > 0 && (!subtitles[0].startTime || !subtitles[0].text)) {
+                     console.warn("Parsed structure seems invalid (missing startTime or text in first entry).");
+                     return null;
+                 }
+
+                console.log(`Parsed ${subtitles.length} subtitle entries.`);
+                return subtitles;
+            } catch (error) {
+                console.error('Error parsing SRT:', error.message);
+                console.error('Problematic SRT start:\n' + srtText.substring(0, 300));
+                return null;
+            }
+        }
+
+        // --- Define Addon Handler (Inside IIFE) ---
+        builder.defineSubtitlesHandler(async ({ type, id, extra, config }) => {
+            console.log('Dual Subtitle request:', { type, id, extra });
+            console.log('Config:', config);
+
+            // Get selected languages from config, with defaults
+            const mainLang = config?.mainLang || 'eng';
+            const transLang = config?.transLang || 'tur';
+            const isWebVersion = config?.version === 'web';
+
+            console.log(`Selected Languages: Main=${mainLang}, Translation=${transLang}`);
+            console.log(`Using ${isWebVersion ? 'WEB' : 'DESKTOP'} version settings.`);
+
+            // Parse the IMDB ID
+            let imdbId = extra?.imdbId || id;
+            let season = extra?.season;
+            let episode = extra?.episode;
+
+            // Handle combined series ID format (e.g., tt12345:1:2)
+            if (imdbId.includes(':')) {
+                const parts = imdbId.split(':');
+                imdbId = parts[0];
+                if (parts.length >= 3) {
+                    season = season || parts[1];
+                    episode = episode || parts[2];
+                }
+            }
+
+            if (!imdbId || !imdbId.startsWith('tt')) {
+                console.log('No valid IMDB ID provided');
+                return { subtitles: [] };
+            }
+
+            // Prepare base search parameters (without language)
+            const baseSearchParams = {
+                imdbid: imdbId.replace('tt', '')
+            };
+            if (type === 'series' && season && episode) {
+                baseSearchParams.season = season;
+                baseSearchParams.episode = episode;
+            }
+
+            try {
+                // Fetch subtitles metadata for both languages concurrently
+                console.log("Fetching subtitle metadata for both languages...");
+                const [mainSubInfo, transSubInfo] = await Promise.all([
+                    fetchAndSelectSubtitle(mainLang, baseSearchParams, isWebVersion),
+                    fetchAndSelectSubtitle(transLang, baseSearchParams, isWebVersion)
+                ]);
+
+                // Check if we got metadata for both
+                if (!mainSubInfo || !transSubInfo) {
+                     console.log("Could not find subtitle metadata for both requested languages.");
+                     // Try returning only main if found
+                     if (mainSubInfo?.url) {
+                          console.warn("Could not get translation metadata. Attempting to return only main subtitle.");
+                          const mainContentAlone = await fetchSubtitleContent(mainSubInfo.url);
+                          if (mainContentAlone) {
+                              // Use Base64 encoding for the Data URI
+                              const mainDataUriAlone = `data:application/x-subrip;base64,${Buffer.from(mainContentAlone).toString('base64')}`;
+                              return {
+                                 subtitles: [{
+                                     id: mainSubInfo.id,
+                                     url: mainDataUriAlone,
+                                     lang: mainLang,
+                                     name: `[${mainLang.toUpperCase()}] ${mainSubInfo.releaseName || 'Main Subtitle'} (No Translation Found)`
+                                  }],
+                                 cacheMaxAge: 3600
+                              };
+                          }
+                     }
+                     return { subtitles: [], cacheMaxAge: 60 }; // Cache failure briefly
+                }
+
+                console.log(`Selected Main Subtitle (${mainLang}): ID=${mainSubInfo.id}, Lang=${mainSubInfo.langName}, Rating=${mainSubInfo.rating}, Format=${mainSubInfo.format}, URL=${mainSubInfo.url}`);
+                console.log(`Selected Translation Subtitle (${transLang}): ID=${transSubInfo.id}, Lang=${transSubInfo.langName}, Rating=${transSubInfo.rating}, Format=${transSubInfo.format}, URL=${transSubInfo.url}`);
+
+                 // --- Fetch Content, Parse, Merge ---
+                 console.log("Fetching subtitle content...");
+                 const [mainSubContent, transSubContent] = await Promise.all([
+                     fetchSubtitleContent(mainSubInfo.url),
+                     fetchSubtitleContent(transSubInfo.url)
+                 ]);
+
+                 if (!mainSubContent || !transSubContent) {
+                     console.error("Failed to fetch content for one or both subtitles.");
+                      // Try returning only main if content available
+                      if (mainSubContent && mainSubInfo?.url) {
+                           console.warn("Failed to fetch translation content. Returning only main subtitle.");
+                           const mainDataUriAlone = `data:application/x-subrip;base64,${Buffer.from(mainSubContent).toString('base64')}`;
+                           return {
+                              subtitles: [{
+                                  id: mainSubInfo.id,
+                                  url: mainDataUriAlone,
+                                  lang: mainLang,
+                                  name: `[${mainLang.toUpperCase()}] ${mainSubInfo.releaseName || 'Main Subtitle'} (Translation Fetch Failed)`
+                               }],
+                              cacheMaxAge: 3600
+                           };
+                      }
+                     return { subtitles: [], cacheMaxAge: 60 };
+                 }
+
+                 console.log("Parsing subtitles...");
+                 if (mainSubInfo.format?.toLowerCase() !== 'srt' || transSubInfo.format?.toLowerCase() !== 'srt') {
+                     console.warn(`One or both subtitles are not SRT (${mainSubInfo.format}, ${transSubInfo.format}). Merging assumes SRT structure. Results may be inaccurate.`);
+                 }
+
+                 // Now call the parseSrt defined within the IIFE scope
+                 const mainParsed = parseSrt(mainSubContent);
+                 const transParsed = parseSrt(transSubContent);
+
+                 if (!mainParsed || !transParsed) {
+                     console.error("Failed to parse one or both subtitles.");
+                      if (mainParsed && mainSubInfo?.url) {
+                          console.warn("Translation subtitle failed parsing. Returning only the main subtitle.");
+                            const formattedMain = formatSrt(mainParsed);
+                            if (formattedMain) {
+                                 const mainSubDataUri = `data:application/x-subrip;base64,${Buffer.from(formattedMain).toString('base64')}`;
+                                 return {
+                                     subtitles: [{
+                                         id: mainSubInfo.id,
+                                         url: mainSubDataUri,
+                                         lang: mainLang,
+                                         name: `[${mainLang.toUpperCase()}] ${mainSubInfo.releaseName || 'Main Subtitle'} (Translation Parse Failed)`
+                                      }],
+                                     cacheMaxAge: 3600
+                                  };
+                            } else {
+                                 console.error("Failed to re-format main subtitle after translation parse failure.");
+                            }
+                      }
+                     return { subtitles: [], cacheMaxAge: 60 };
+                 }
+
+                 console.log("Merging subtitles...");
+                 // Call mergeSubtitles (defined outside IIFE)
+                 const mergedParsed = mergeSubtitles(mainParsed, transParsed);
+
+                 if (!mergedParsed || mergedParsed.length === 0) {
+                     console.error("Merging resulted in empty subtitles.");
+                     return { subtitles: [], cacheMaxAge: 60 };
+                 }
+
+                 console.log("Formatting merged subtitles to SRT...");
+                 // Call formatSrt (defined inside IIFE)
+                 const mergedSrtString = formatSrt(mergedParsed);
+
+                 if (!mergedSrtString) {
+                     console.error("Failed to format merged subtitles back to SRT.");
+                     return { subtitles: [], cacheMaxAge: 60 };
+                 }
+
+                 console.log("Creating Data URI for merged subtitles...");
+                 const mergedSubDataUri = `data:application/x-subrip;base64,${Buffer.from(mergedSrtString).toString('base64')}`;
+
+                 // Return the single merged subtitle entry
+                 return {
+                     subtitles: [{
+                         id: `merged-${mainSubInfo.id}-${transSubInfo.id}`,
+                         url: mergedSubDataUri,
+                         lang: `${mainLang}+${transLang}`, // Custom lang code for dual subs
+                         name: `[${mainLang.toUpperCase()}/${transLang.toUpperCase()}] Dual Subtitle`
+                     }],
+                     cacheMaxAge: 6 * 3600, // Cache for 6 hours
+                     staleRevalidate: 24 * 3600 // Allow stale for 1 day
+                 };
+                 // --- End Merging Logic ---
+
+            } catch (error) {
+                console.error('Error in subtitle handler:', error.message, error.stack);
+                return { subtitles: [], cacheMaxAge: 60 }; // Cache failure briefly
+            }
+        });
+
+        // --- Start Server (Inside IIFE) ---
+        serveHTTP(builder.getInterface(), { port: ADDON_PORT });
+        console.log(`Dual Language Subtitles Addon running at ${ADDON_URL}/manifest.json`);
+        console.log(`To install in Stremio, open: stremio://addon/${encodeURIComponent(ADDON_URL)}/manifest.json`);
+        console.log(`After installation, click the "Configure" button to select Main and Translation languages.`);
+
+    } catch (err) {
+        console.error("Failed to import srt-parser-2 or setup addon:", err);
+        process.exit(1); // Exit if essential import fails
+    }
+})();
+
+console.log("Addon script initialized. Waiting for ESM import and server start..."); // Log outside IIFE 
