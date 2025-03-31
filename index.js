@@ -12,7 +12,6 @@ const OPENSUBS_API_URL = 'https://rest.opensubtitles.org';
 
 // Configuration
 const ADDON_PORT = process.env.PORT || 7000;
-const ADDON_URL = process.env.ADDON_URL || `http://localhost:${ADDON_PORT}`;
 
 console.log(`Addon configured for ${process.env.WEB_VERSION === 'true' ? 'WEB' : 'DESKTOP'} version of Stremio`);
 
@@ -24,9 +23,9 @@ let requestTimer = null;
 
 // Create a new addon builder
 const builder = new addonBuilder({
-    id: 'org.stremio.dualsubtitles',
+    id: 'com.serhat.strelingo',
     version: '0.1.0',
-    name: 'Dual Language Subtitles',
+    name: 'Strelingo - Dual Language Subtitles',
     description: 'Provides dual subtitles (main + translation) from OpenSubtitles for language learning.',
     resources: ['subtitles'],
     types: ['movie', 'series'],
@@ -677,9 +676,6 @@ process.on('SIGINT', () => {
 
         // --- Start Server (Inside IIFE) ---
         serveHTTP(builder.getInterface(), { port: ADDON_PORT });
-        console.log(`Dual Language Subtitles Addon running at ${ADDON_URL}/manifest.json`);
-        console.log(`To install in Stremio, open: stremio://addon/${encodeURIComponent(ADDON_URL)}/manifest.json`);
-        console.log(`After installation, click the "Configure" button to select Main and Translation languages.`);
 
     } catch (err) {
         console.error("Failed to import srt-parser-2 or setup addon:", err);

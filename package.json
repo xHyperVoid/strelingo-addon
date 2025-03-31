@@ -1,7 +1,7 @@
 {
-  "name": "stremio-dualsubtitles-addon",
+  "name": "strelingo-addon",
   "version": "0.1.0",
-  "description": "Stremio addon for dual language subtitles using OpenSubtitles",
+  "description": "Stremio addon (Strelingo) for dual language subtitles using OpenSubtitles",
   "main": "index.js",
   "scripts": {
     "start": "node index.js"
