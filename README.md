@@ -2,6 +2,8 @@
 
 This Stremio addon fetches subtitles for movies and series from OpenSubtitles and merges two language tracks into a single subtitle file. This is particularly useful for language learners who want to see subtitles in both their native language and the language they are learning simultaneously.
 
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/import/project?template=https://github.com/Serkali-sudo/strelingo-addon)
+
 ## Features
 
 *   Fetches subtitles from OpenSubtitles.
@@ -20,7 +22,8 @@ This Stremio addon fetches subtitles for movies and series from OpenSubtitles an
 *   [Node.js](https://nodejs.org/) (Version 14 or higher recommend)
 *   [npm](https://www.npmjs.com/) or [yarn](https://yarnpkg.com/)
 
-## Installation & Setup
+
+## Local Setup
 
 1.  **Clone the repository:**
     ```bash
