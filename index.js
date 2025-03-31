@@ -263,7 +263,6 @@ async function fetchSubtitleContent(url) {
             // iconv-lite handles BOMs for UTF-8, UTF-16LE, UTF-16BE automatically
             subtitleText = iconv.decode(contentBuffer, detectedEncoding);
             console.log(`Successfully decoded subtitle ${url} using ${detectedEncoding}.`);
-            console.log(`Decoded text start: [${subtitleText.substring(0, 300)}]`); // Log start of decoded text (increased length)
 
             // Optional: If it was detected as UTF-8, double check for the FEFF char code just in case
             // iconv *should* handle this, but as a safeguard:
@@ -471,8 +470,6 @@ process.on('SIGINT', () => {
                 // Pre-process: normalize line endings
                 srtText = srtText.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
 
-                console.log(`Input text start for SRTParser2: [${srtText.substring(0, 300)}]`); // Log input (increased length)
-
                 const subtitles = parser.fromSrt(srtText);
 
                 if (!Array.isArray(subtitles)) {
@@ -499,7 +496,6 @@ process.on('SIGINT', () => {
                 return subtitles;
             } catch (error) {
                 console.error('Error parsing SRT:', error.message);
-                console.error('Problematic SRT start:\n' + srtText.substring(0, 300));
                 return null;
             }
         }
