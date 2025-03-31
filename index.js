@@ -254,7 +254,7 @@ async function fetchSubtitleContent(url) {
             // iconv-lite handles BOMs for UTF-8, UTF-16LE, UTF-16BE automatically
             subtitleText = iconv.decode(contentBuffer, detectedEncoding);
             console.log(`Successfully decoded subtitle ${url} using ${detectedEncoding}.`);
-            console.log(`Decoded text start: [${subtitleText.substring(0, 100)}]`); // Log start of decoded text
+            console.log(`Decoded text start: [${subtitleText.substring(0, 300)}]`); // Log start of decoded text (increased length)
 
             // Optional: If it was detected as UTF-8, double check for the FEFF char code just in case
             // iconv *should* handle this, but as a safeguard:
@@ -462,6 +462,8 @@ process.on('SIGINT', () => {
                 // Pre-process: normalize line endings
                 srtText = srtText.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
 
+                console.log(`Input text start for SRTParser2: [${srtText.substring(0, 300)}]`); // Log input (increased length)
+
                 const subtitles = parser.fromSrt(srtText);
 
                 if (!Array.isArray(subtitles)) {
@@ -472,6 +474,13 @@ process.on('SIGINT', () => {
                      console.warn("Parsing resulted in an empty array despite non-empty input.");
                      return null; // Treat as parse failure if input wasn't just whitespace
                  }
+                 // Log the text of the first parsed subtitle entry, if it exists
+                 if (subtitles.length > 0) {
+                     console.log(`First parsed subtitle text by SRTParser2: [${subtitles[0].text}]`);
+                 } else {
+                     console.log("SRTParser2 returned an empty array.");
+                 }
+
                  if (subtitles.length > 0 && (!subtitles[0].startTime || !subtitles[0].text)) {
                      console.warn("Parsed structure seems invalid (missing startTime or text in first entry).");
                      return null;
