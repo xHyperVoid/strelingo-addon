@@ -32,7 +32,7 @@ const builder = new addonBuilder({
     types: ['movie', 'series'],
     idPrefixes: ['tt'],
     logo: 'https://img.icons8.com/ios/452/translate-app.png',
-    background: '/strelingo_back.jpg',
+    background: `${ADDON_URL}/strelingo_back.jpg`,
     catalogs: [],
     behaviorHints: {
         configurable: true,
