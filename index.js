@@ -13,8 +13,6 @@ const OPENSUBS_API_URL = 'https://rest.opensubtitles.org';
 // Configuration
 const ADDON_PORT = process.env.PORT || 7000;
 
-console.log(`Addon configured for ${process.env.WEB_VERSION === 'true' ? 'WEB' : 'DESKTOP'} version of Stremio`);
-
 // Rate limiting
 const requestQueue = [];
 const MAX_REQUESTS_PER_MINUTE = 40; // OpenSubtitles limit
