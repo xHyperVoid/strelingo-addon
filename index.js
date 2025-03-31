@@ -4,7 +4,7 @@ const { addonBuilder, serveHTTP } = require('stremio-addon-sdk');
 const axios = require('axios');
 const pako = require('pako');
 const { Buffer } = require('buffer');
-const jschardet = require('jschardet');
+const chardet = require('chardet');
 const iconv = require('iconv-lite');
 
 // OpenSubtitles API base URL
@@ -200,26 +200,26 @@ async function fetchSubtitleContent(url) {
             }
         }
 
-        // 2. Detect Encoding
+        // 2. Detect Encoding using chardet
         let detectedEncoding = 'utf8'; // Default
         let rawDetectedEncoding = null;
-        let detectionConfidence = 0;
+        let detectionConfidence = 0; // chardet doesn't provide confidence score in the same way
         try {
-            const detected = jschardet.detect(contentBuffer);
-            rawDetectedEncoding = detected?.encoding;
-            detectionConfidence = detected?.confidence || 0;
-            console.log(`jschardet raw detection: encoding=${rawDetectedEncoding}, confidence=${detectionConfidence.toFixed(2)}`); // Log raw detection
+            // chardet.detect expects a Buffer
+            rawDetectedEncoding = chardet.detect(contentBuffer);
+            console.log(`chardet raw detection: encoding=${rawDetectedEncoding}`); // Log raw detection
 
-            if (detected && detected.encoding && detected.confidence > 0.8) { // Use if confidence is high
-                // Map common names/aliases if needed
-                switch (detected.encoding.toLowerCase()) {
-                    case 'windows-1254': // Common Turkish encoding
+            if (rawDetectedEncoding) {
+                const normalizedEncoding = rawDetectedEncoding.toLowerCase();
+                // Map common names/aliases if needed - chardet might return different names
+                switch (normalizedEncoding) {
+                    case 'windows-1254':
                         detectedEncoding = 'win1254';
                         break;
-                    case 'iso-8859-9': // Another common Turkish encoding
+                    case 'iso-8859-9':
                         detectedEncoding = 'iso88599';
                         break;
-                    case 'windows-1252': // Map detected windows-1252 to win1252 for iconv-lite
+                    case 'windows-1252':
                         detectedEncoding = 'win1252';
                         break;
                     case 'utf-16le':
@@ -229,19 +229,25 @@ async function fetchSubtitleContent(url) {
                         detectedEncoding = 'utf16be';
                         break;
                     case 'ascii':
+                    case 'us-ascii':
                         detectedEncoding = 'utf8'; // Treat ASCII as UTF-8
                         break;
                     case 'utf-8':
-                    case 'utf8':
                          detectedEncoding = 'utf8';
                          break;
-                    // Add more mappings if necessary based on jschardet results
+                    // Add more mappings if necessary based on chardet results
                     default:
-                        detectedEncoding = detected.encoding;
+                        // Check if iconv supports the detected encoding directly
+                        if (iconv.encodingExists(normalizedEncoding)) {
+                            detectedEncoding = normalizedEncoding;
+                        } else {
+                            console.warn(`Detected encoding '${rawDetectedEncoding}' not directly supported by iconv-lite or mapped. Falling back to UTF-8.`);
+                            detectedEncoding = 'utf8'; // Fallback if unknown
+                        }
                 }
-                console.log(`Detected encoding: ${rawDetectedEncoding} (confidence: ${detectionConfidence.toFixed(2)}), using: ${detectedEncoding}`);
+                console.log(`Detected encoding: ${rawDetectedEncoding}, using: ${detectedEncoding}`);
             } else {
-                console.log(`Encoding detection confidence <= 0.8 or failed for ${url}. Defaulting to UTF-8.`);
+                console.log(`Encoding detection failed for ${url}. Defaulting to UTF-8.`);
                 // Try to remove potential BOM manually if UTF-8 is assumed
                 if(contentBuffer.length > 3 && contentBuffer[0] === 0xEF && contentBuffer[1] === 0xBB && contentBuffer[2] === 0xBF) {
                     console.log("Found UTF-8 BOM, removing it before potential decode.");
