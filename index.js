@@ -39,13 +39,6 @@ const builder = new addonBuilder({
     },
     config: [
         {
-            key: 'version',
-            type: 'select',
-            title: 'Stremio Version (Web requires manual subtitle upload)',
-            options: ['desktop', 'web'],
-            default: 'desktop'
-        },
-        {
             key: 'mainLang',
             type: 'select',
             title: 'Main Language (Audio Language)',
@@ -109,7 +102,7 @@ function withRateLimit(fn) {
 }
 
 // --- Helper Function to Fetch and Select Subtitle ---
-async function fetchAndSelectSubtitle(languageId, baseSearchParams, isWebVersion) {
+async function fetchAndSelectSubtitle(languageId, baseSearchParams) {
     const searchParams = { ...baseSearchParams, sublanguageid: languageId };
     const searchUrl = buildSearchUrl(searchParams);
     console.log(`Searching ${languageId} subtitles at: ${searchUrl}`);
@@ -143,15 +136,12 @@ async function fetchAndSelectSubtitle(languageId, baseSearchParams, isWebVersion
          const directUrl = firstValidSubtitle.SubDownloadLink;
          // Basic URL handling for now - merging requires fetching content later
          let subtitleUrl = directUrl;
-         if (directUrl.endsWith('.gz') && !isWebVersion) {
+         if (directUrl.endsWith('.gz')) {
              // Desktop can potentially handle this via streaming server, but we need the raw file for merging
              // For now, just keep the direct link - we'll need to handle decompression later
              console.log(`Found gzipped subtitle for ${languageId}. Will need decompression.`);
-             // subtitleUrl = `http://127.0.0.1:11470/subtitles.vtt?from=${encodeURIComponent(directUrl)}`;
-         } else if (directUrl.endsWith('.gz') && isWebVersion) {
-            console.warn(`Gzipped subtitles (${languageId}) might not work directly in the web version without server-side processing.`);
+             // We assume desktop behavior, so no warning needed here for .gz files
          }
-
 
         return {
             id: firstValidSubtitle.IDSubtitleFile,
@@ -501,16 +491,14 @@ process.on('SIGINT', () => {
 
         // --- Define Addon Handler (Inside IIFE) ---
         builder.defineSubtitlesHandler(async ({ type, id, extra, config }) => {
-            console.log('Dual Subtitle request:', { type, id, extra });
+            console.log('Strelingo Subtitle request:', { type, id, extra });
             console.log('Config:', config);
 
             // Get selected languages from config, with defaults
             const mainLang = config?.mainLang || 'eng';
             const transLang = config?.transLang || 'tur';
-            const isWebVersion = config?.version === 'web';
 
             console.log(`Selected Languages: Main=${mainLang}, Translation=${transLang}`);
-            console.log(`Using ${isWebVersion ? 'WEB' : 'DESKTOP'} version settings.`);
 
             // Parse the IMDB ID
             let imdbId = extra?.imdbId || id;
@@ -545,8 +533,8 @@ process.on('SIGINT', () => {
                 // Fetch subtitles metadata for both languages concurrently
                 console.log("Fetching subtitle metadata for both languages...");
                 const [mainSubInfo, transSubInfo] = await Promise.all([
-                    fetchAndSelectSubtitle(mainLang, baseSearchParams, isWebVersion),
-                    fetchAndSelectSubtitle(transLang, baseSearchParams, isWebVersion)
+                    fetchAndSelectSubtitle(mainLang, baseSearchParams),
+                    fetchAndSelectSubtitle(transLang, baseSearchParams)
                 ]);
 
                 // Check if we got metadata for both
