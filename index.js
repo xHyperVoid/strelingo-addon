@@ -219,6 +219,9 @@ async function fetchSubtitleContent(url) {
                     case 'iso-8859-9': // Another common Turkish encoding
                         detectedEncoding = 'iso88599';
                         break;
+                    case 'windows-1252': // Map detected windows-1252 to win1252 for iconv-lite
+                        detectedEncoding = 'win1252';
+                        break;
                     case 'utf-16le':
                         detectedEncoding = 'utf16le';
                         break;
