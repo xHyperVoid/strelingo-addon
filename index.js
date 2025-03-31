@@ -42,7 +42,7 @@ const builder = new addonBuilder({
             key: 'mainLang',
             type: 'select',
             title: 'Main Language (Audio Language)',
-            options: ['eng', 'tur', 'spa', 'fra', 'deu', 'ita', 'por'],
+            options: ['ara', 'chi', 'dut', 'eng', 'fra', 'deu', 'hin', 'ita', 'jpn', 'kor', 'nor', 'pol', 'por', 'rus', 'spa', 'swe', 'tur'],
             required: true,
             default: 'eng'
         },
@@ -50,7 +50,7 @@ const builder = new addonBuilder({
             key: 'transLang',
             type: 'select',
             title: 'Translation Language (Your Language)',
-            options: ['eng', 'tur', 'spa', 'fra', 'deu', 'ita', 'por'],
+            options: ['ara', 'chi', 'dut', 'eng', 'fra', 'deu', 'hin', 'ita', 'jpn', 'kor', 'nor', 'pol', 'por', 'rus', 'spa', 'swe', 'tur'],
             required: true,
             default: 'tur'
         }
