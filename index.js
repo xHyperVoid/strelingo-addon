@@ -202,8 +202,14 @@ async function fetchSubtitleContent(url) {
 
         // 2. Detect Encoding
         let detectedEncoding = 'utf8'; // Default
+        let rawDetectedEncoding = null;
+        let detectionConfidence = 0;
         try {
             const detected = jschardet.detect(contentBuffer);
+            rawDetectedEncoding = detected?.encoding;
+            detectionConfidence = detected?.confidence || 0;
+            console.log(`jschardet raw detection: encoding=${rawDetectedEncoding}, confidence=${detectionConfidence.toFixed(2)}`); // Log raw detection
+
             if (detected && detected.encoding && detected.confidence > 0.8) { // Use if confidence is high
                 // Map common names/aliases if needed
                 switch (detected.encoding.toLowerCase()) {
@@ -230,9 +236,9 @@ async function fetchSubtitleContent(url) {
                     default:
                         detectedEncoding = detected.encoding;
                 }
-                console.log(`Detected encoding: ${detected.encoding} (confidence: ${detected.confidence.toFixed(2)}), using: ${detectedEncoding}`);
+                console.log(`Detected encoding: ${rawDetectedEncoding} (confidence: ${detectionConfidence.toFixed(2)}), using: ${detectedEncoding}`);
             } else {
-                console.log(`Encoding detection confidence low or failed for ${url}. Defaulting to UTF-8.`);
+                console.log(`Encoding detection confidence <= 0.8 or failed for ${url}. Defaulting to UTF-8.`);
                 // Try to remove potential BOM manually if UTF-8 is assumed
                 if(contentBuffer.length > 3 && contentBuffer[0] === 0xEF && contentBuffer[1] === 0xBB && contentBuffer[2] === 0xBF) {
                     console.log("Found UTF-8 BOM, removing it before potential decode.");
@@ -248,6 +254,7 @@ async function fetchSubtitleContent(url) {
             // iconv-lite handles BOMs for UTF-8, UTF-16LE, UTF-16BE automatically
             subtitleText = iconv.decode(contentBuffer, detectedEncoding);
             console.log(`Successfully decoded subtitle ${url} using ${detectedEncoding}.`);
+            console.log(`Decoded text start: [${subtitleText.substring(0, 100)}]`); // Log start of decoded text
 
             // Optional: If it was detected as UTF-8, double check for the FEFF char code just in case
             // iconv *should* handle this, but as a safeguard:
