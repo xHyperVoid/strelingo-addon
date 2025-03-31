@@ -32,7 +32,7 @@ const builder = new addonBuilder({
     types: ['movie', 'series'],
     idPrefixes: ['tt'],
     logo: 'https://img.icons8.com/ios/452/translate-app.png',
-    background: 'strelingo_back.jpg',
+    background: '/public/strelingo_back.jpg',
     catalogs: [],
     behaviorHints: {
         configurable: true,
@@ -676,8 +676,12 @@ process.on('SIGINT', () => {
         });
 
         // --- Start Server (Inside IIFE) ---
-        serveHTTP(builder.getInterface(), { port: ADDON_PORT });
+        serveHTTP(builder.getInterface(), { 
+            port: ADDON_PORT, 
+            static: './public' // Serve static files from the 'public' directory
+        });
         console.log(`Dual Language Subtitles Addon running at ${ADDON_URL}/manifest.json`);
+        console.log(`Static files served from: ./public`); // Add log for static path
         console.log(`To install in Stremio, open: stremio://addon/${encodeURIComponent(ADDON_URL)}/manifest.json`);
         console.log(`After installation, click the "Configure" button to select Main and Translation languages.`);
 
