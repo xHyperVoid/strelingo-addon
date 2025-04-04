@@ -12,7 +12,8 @@
     "srt-parser-2": "^1.1.7",
     "pako": "^2.1.0",
     "chardet": "^1.4.0",
-    "iconv-lite": "^0.6.3"
+    "iconv-lite": "^0.6.3",
+    "@vercel/blob": "^0.22.1"
   },
   "engines": {
     "node": ">=14"

@@ -6,6 +6,7 @@ const pako = require('pako');
 const { Buffer } = require('buffer');
 const chardet = require('chardet');
 const iconv = require('iconv-lite');
+const { put } = require('@vercel/blob');
 
 // OpenSubtitles API base URL
 const OPENSUBS_API_URL = 'https://rest.opensubtitles.org';
@@ -630,7 +631,6 @@ process.on('SIGINT', () => {
                  }
 
                  console.log("Formatting merged subtitles to SRT...");
-                 // Call formatSrt (defined inside IIFE)
                  const mergedSrtString = formatSrt(mergedParsed);
 
                  if (!mergedSrtString) {
@@ -638,20 +638,33 @@ process.on('SIGINT', () => {
                      return { subtitles: [], cacheMaxAge: 60 };
                  }
 
-                 console.log("Creating Data URI for merged subtitles...");
-                 const mergedSubDataUri = `data:application/x-subrip;base64,${Buffer.from(mergedSrtString).toString('base64')}`;
+                 console.log("Uploading merged subtitles to Vercel Blob...");
+                 try {
+                     // Upload the SRT content to Vercel Blob
+                     // The pathname includes unique identifiers to prevent collisions
+                     const { url } = await put(
+                         `subtitles/${mainSubInfo.id}-${transSubInfo.id}.srt`,
+                         mergedSrtString,
+                         { access: 'public', addRandomSuffix: true }
+                     );
 
-                 // Return the single merged subtitle entry
-                 return {
-                     subtitles: [{
-                         id: `merged-${mainSubInfo.id}-${transSubInfo.id}`,
-                         url: mergedSubDataUri,
-                         lang: `${mainLang}+${transLang}`, // Custom lang code for dual subs
-                         name: `[${mainLang.toUpperCase()}/${transLang.toUpperCase()}] Dual Subtitle`
-                     }],
-                     cacheMaxAge: 6 * 3600, // Cache for 6 hours
-                     staleRevalidate: 24 * 3600 // Allow stale for 1 day
-                 };
+                     console.log(`Subtitle file uploaded to: ${url}`);
+
+                     // Return the single merged subtitle entry with the Vercel Blob URL
+                     return {
+                         subtitles: [{
+                             id: `merged-${mainSubInfo.id}-${transSubInfo.id}`,
+                             url: url,
+                             lang: `${mainLang}+${transLang}`, // Custom lang code for dual subs
+                             name: `[${mainLang.toUpperCase()}/${transLang.toUpperCase()}] Dual Subtitle`
+                         }],
+                         cacheMaxAge: 6 * 3600, // Cache for 6 hours
+                         staleRevalidate: 24 * 3600 // Allow stale for 1 day
+                     };
+                 } catch (uploadError) {
+                     console.error("Failed to upload subtitle file to Vercel Blob:", uploadError);
+                     return { subtitles: [], cacheMaxAge: 60 };
+                 }
                  // --- End Merging Logic ---
 
             } catch (error) {
