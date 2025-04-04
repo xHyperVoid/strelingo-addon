@@ -6,10 +6,10 @@ const pako = require('pako');
 const { Buffer } = require('buffer');
 const chardet = require('chardet');
 const iconv = require('iconv-lite');
-const { put, client } = require('@vercel/blob');
+const { put, createClient } = require('@vercel/blob');
 
 // Configure Vercel Blob client with custom token
-const blobClient = client({
+const blobClient = createClient({
     token: process.env.STRELINGO_READ_WRITE_TOKEN
 });
 
