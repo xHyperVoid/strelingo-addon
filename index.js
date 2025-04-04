@@ -14,7 +14,12 @@ const OPENSUBS_API_URL = 'https://rest.opensubtitles.org';
 
 // Configuration
 const ADDON_PORT = process.env.PORT || 7000;
-const ADDON_BASE_URL = process.env.ADDON_URL || `http://localhost:${ADDON_PORT}`;
+// Determine base URL: Prioritize Vercel URL, then custom ADDON_URL, then localhost
+const ADDON_BASE_URL = process.env.VERCEL_URL
+    ? `https://${process.env.VERCEL_URL}`
+    : process.env.ADDON_URL
+    ? process.env.ADDON_URL
+    : `http://localhost:${ADDON_PORT}`;
 
 // Rate limiting
 const requestQueue = [];
@@ -663,7 +668,7 @@ process.on('SIGINT', () => {
         // --- Start Express Server ---
         app.listen(ADDON_PORT, () => {
             console.log(`Strelingo Addon with Express server running on port ${ADDON_PORT}`);
-            // Provide the manifest URL for installation
+            // Provide the manifest URL based on the determined base URL
             console.log(`Manifest URL: ${ADDON_BASE_URL}/manifest.json`);
         });
 
