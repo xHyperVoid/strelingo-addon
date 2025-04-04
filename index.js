@@ -6,45 +6,18 @@ const pako = require('pako');
 const { Buffer } = require('buffer');
 const chardet = require('chardet');
 const iconv = require('iconv-lite');
-const express = require('express');
-const crypto = require('crypto');
 
 // OpenSubtitles API base URL
 const OPENSUBS_API_URL = 'https://rest.opensubtitles.org';
 
 // Configuration
 const ADDON_PORT = process.env.PORT || 7000;
-// Determine base URL: Prioritize Vercel URL, then custom ADDON_URL, then localhost
-const ADDON_BASE_URL = process.env.VERCEL_URL
-    ? `https://${process.env.VERCEL_URL}`
-    : process.env.ADDON_URL
-    ? process.env.ADDON_URL
-    : `http://localhost:${ADDON_PORT}`;
 
 // Rate limiting
 const requestQueue = [];
 const MAX_REQUESTS_PER_MINUTE = 40; // OpenSubtitles limit
 let requestsThisMinute = 0;
 let requestTimer = null;
-
-// --- Temporary Subtitle Cache ---
-const subtitleCache = new Map();
-const SUBTITLE_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
-
-function cleanupExpiredCache() {
-    const now = Date.now();
-    for (const [id, entry] of subtitleCache.entries()) {
-        if (now > entry.expires) {
-            console.log(`Expiring cached subtitle: ${id}`);
-            subtitleCache.delete(id);
-        }
-    }
-}
-// Periodically clean up expired entries (e.g., every minute)
-setInterval(cleanupExpiredCache, 60 * 1000).unref();
-
-// --- Express App Setup ---
-const app = express();
 
 // Create a new addon builder
 const builder = new addonBuilder({
@@ -519,15 +492,18 @@ process.on('SIGINT', () => {
             console.log('Strelingo Subtitle request:', { type, id, extra });
             console.log('Config:', config);
 
+            // Get selected languages from config, with defaults
             const mainLang = config?.mainLang || 'eng';
             const transLang = config?.transLang || 'tur';
 
             console.log(`Selected Languages: Main=${mainLang}, Translation=${transLang}`);
 
+            // Parse the IMDB ID
             let imdbId = extra?.imdbId || id;
             let season = extra?.season;
             let episode = extra?.episode;
 
+            // Handle combined series ID format (e.g., tt12345:1:2)
             if (imdbId.includes(':')) {
                 const parts = imdbId.split(':');
                 imdbId = parts[0];
@@ -542,6 +518,7 @@ process.on('SIGINT', () => {
                 return { subtitles: [] };
             }
 
+            // Prepare base search parameters (without language)
             const baseSearchParams = {
                 imdbid: imdbId.replace('tt', '')
             };
@@ -551,83 +528,131 @@ process.on('SIGINT', () => {
             }
 
             try {
-                // Fetch subtitles metadata
-                console.log("Fetching subtitle metadata...");
+                // Fetch subtitles metadata for both languages concurrently
+                console.log("Fetching subtitle metadata for both languages...");
                 const [mainSubInfo, transSubInfo] = await Promise.all([
                     fetchAndSelectSubtitle(mainLang, baseSearchParams),
                     fetchAndSelectSubtitle(transLang, baseSearchParams)
                 ]);
 
+                // Check if we got metadata for both
                 if (!mainSubInfo || !transSubInfo) {
-                    // Handle case where one or both languages are not found
-                    // (Could potentially still serve single language if needed)
-                    console.log("Could not find subtitle metadata for both requested languages.");
-                    return { subtitles: [], cacheMaxAge: 60 };
+                     console.log("Could not find subtitle metadata for both requested languages.");
+                     // Try returning only main if found
+                     if (mainSubInfo?.url) {
+                          console.warn("Could not get translation metadata. Attempting to return only main subtitle.");
+                          const mainContentAlone = await fetchSubtitleContent(mainSubInfo.url);
+                          if (mainContentAlone) {
+                              // Use Base64 encoding for the Data URI
+                              const mainDataUriAlone = `data:application/x-subrip;base64,${Buffer.from(mainContentAlone).toString('base64')}`;
+                              return {
+                                 subtitles: [{
+                                     id: mainSubInfo.id,
+                                     url: mainDataUriAlone,
+                                     lang: mainLang,
+                                     name: `[${mainLang.toUpperCase()}] ${mainSubInfo.releaseName || 'Main Subtitle'} (No Translation Found)`
+                                  }],
+                                 cacheMaxAge: 3600
+                              };
+                          }
+                     }
+                     return { subtitles: [], cacheMaxAge: 60 }; // Cache failure briefly
                 }
 
-                console.log(`Selected Main Subtitle (${mainLang}): ID=${mainSubInfo.id}, URL=${mainSubInfo.url}`);
-                console.log(`Selected Translation Subtitle (${transLang}): ID=${transSubInfo.id}, URL=${transSubInfo.url}`);
+                console.log(`Selected Main Subtitle (${mainLang}): ID=${mainSubInfo.id}, Lang=${mainSubInfo.langName}, Rating=${mainSubInfo.rating}, Format=${mainSubInfo.format}, URL=${mainSubInfo.url}`);
+                console.log(`Selected Translation Subtitle (${transLang}): ID=${transSubInfo.id}, Lang=${transSubInfo.langName}, Rating=${transSubInfo.rating}, Format=${transSubInfo.format}, URL=${transSubInfo.url}`);
 
-                // Fetch Content, Parse, Merge
-                console.log("Fetching subtitle content...");
-                const [mainSubContent, transSubContent] = await Promise.all([
-                    fetchSubtitleContent(mainSubInfo.url),
-                    fetchSubtitleContent(transSubInfo.url)
-                ]);
+                 // --- Fetch Content, Parse, Merge ---
+                 console.log("Fetching subtitle content...");
+                 const [mainSubContent, transSubContent] = await Promise.all([
+                     fetchSubtitleContent(mainSubInfo.url),
+                     fetchSubtitleContent(transSubInfo.url)
+                 ]);
 
-                if (!mainSubContent || !transSubContent) {
-                    console.error("Failed to fetch content for one or both subtitles.");
-                    return { subtitles: [], cacheMaxAge: 60 };
-                }
+                 if (!mainSubContent || !transSubContent) {
+                     console.error("Failed to fetch content for one or both subtitles.");
+                      // Try returning only main if content available
+                      if (mainSubContent && mainSubInfo?.url) {
+                           console.warn("Failed to fetch translation content. Returning only main subtitle.");
+                           const mainDataUriAlone = `data:application/x-subrip;base64,${Buffer.from(mainSubContent).toString('base64')}`;
+                           return {
+                              subtitles: [{
+                                  id: mainSubInfo.id,
+                                  url: mainDataUriAlone,
+                                  lang: mainLang,
+                                  name: `[${mainLang.toUpperCase()}] ${mainSubInfo.releaseName || 'Main Subtitle'} (Translation Fetch Failed)`
+                               }],
+                              cacheMaxAge: 3600
+                           };
+                      }
+                     return { subtitles: [], cacheMaxAge: 60 };
+                 }
 
-                console.log("Parsing subtitles...");
-                const mainParsed = parseSrt(mainSubContent);
-                const transParsed = parseSrt(transSubContent);
+                 console.log("Parsing subtitles...");
+                 if (mainSubInfo.format?.toLowerCase() !== 'srt' || transSubInfo.format?.toLowerCase() !== 'srt') {
+                     console.warn(`One or both subtitles are not SRT (${mainSubInfo.format}, ${transSubInfo.format}). Merging assumes SRT structure. Results may be inaccurate.`);
+                 }
 
-                if (!mainParsed || !transParsed) {
-                    console.error("Failed to parse one or both subtitles.");
-                    return { subtitles: [], cacheMaxAge: 60 };
-                }
+                 // Now call the parseSrt defined within the IIFE scope
+                 const mainParsed = parseSrt(mainSubContent);
+                 const transParsed = parseSrt(transSubContent);
 
-                console.log("Merging subtitles...");
-                const mergedParsed = mergeSubtitles(mainParsed, transParsed);
+                 if (!mainParsed || !transParsed) {
+                     console.error("Failed to parse one or both subtitles.");
+                      if (mainParsed && mainSubInfo?.url) {
+                          console.warn("Translation subtitle failed parsing. Returning only the main subtitle.");
+                            const formattedMain = formatSrt(mainParsed);
+                            if (formattedMain) {
+                                 const mainSubDataUri = `data:application/x-subrip;base64,${Buffer.from(formattedMain).toString('base64')}`;
+                                 return {
+                                     subtitles: [{
+                                         id: mainSubInfo.id,
+                                         url: mainSubDataUri,
+                                         lang: mainLang,
+                                         name: `[${mainLang.toUpperCase()}] ${mainSubInfo.releaseName || 'Main Subtitle'} (Translation Parse Failed)`
+                                      }],
+                                     cacheMaxAge: 3600
+                                  };
+                            } else {
+                                 console.error("Failed to re-format main subtitle after translation parse failure.");
+                            }
+                      }
+                     return { subtitles: [], cacheMaxAge: 60 };
+                 }
 
-                if (!mergedParsed || mergedParsed.length === 0) {
-                    console.error("Merging resulted in empty subtitles.");
-                    return { subtitles: [], cacheMaxAge: 60 };
-                }
+                 console.log("Merging subtitles...");
+                 // Call mergeSubtitles (defined outside IIFE)
+                 const mergedParsed = mergeSubtitles(mainParsed, transParsed);
 
-                console.log("Formatting merged subtitles to SRT...");
-                const mergedSrtString = formatSrt(mergedParsed);
+                 if (!mergedParsed || mergedParsed.length === 0) {
+                     console.error("Merging resulted in empty subtitles.");
+                     return { subtitles: [], cacheMaxAge: 60 };
+                 }
 
-                if (!mergedSrtString) {
-                    console.error("Failed to format merged subtitles back to SRT.");
-                    return { subtitles: [], cacheMaxAge: 60 };
-                }
+                 console.log("Formatting merged subtitles to SRT...");
+                 // Call formatSrt (defined inside IIFE)
+                 const mergedSrtString = formatSrt(mergedParsed);
 
-                // --- Generate Temporary Link --- START
-                console.log("Generating temporary link for merged subtitles...");
-                const uniqueId = crypto.randomBytes(16).toString('hex');
-                const temporaryPath = `/subtitles/${uniqueId}.srt`;
-                const absoluteUrl = `${ADDON_BASE_URL}${temporaryPath}`; // Construct absolute URL
-                const cacheEntry = {
-                    content: mergedSrtString,
-                    expires: Date.now() + SUBTITLE_CACHE_TTL_MS
-                };
-                subtitleCache.set(uniqueId, cacheEntry);
-                console.log(`Cached subtitle ${uniqueId}, URL: ${absoluteUrl}`); // Log absolute URL
-                // --- Generate Temporary Link --- END
+                 if (!mergedSrtString) {
+                     console.error("Failed to format merged subtitles back to SRT.");
+                     return { subtitles: [], cacheMaxAge: 60 };
+                 }
 
-                // Return the single merged subtitle entry with the temporary URL
-                return {
-                    subtitles: [{
-                        id: `merged-${mainSubInfo.id}-${transSubInfo.id}`,
-                        url: absoluteUrl, // Use the absolute temporary URL
-                        lang: `${mainLang}+${transLang}`, // Custom lang code for dual subs
-                        name: `[${mainLang.toUpperCase()}/${transLang.toUpperCase()}] Strelingo Dual Subtitle`
-                    }],
-                    cacheMaxAge: 300 // Cache the *response* briefly (5 mins), link expires separately
-                };
+                 console.log("Creating Data URI for merged subtitles...");
+                 const mergedSubDataUri = `data:application/x-subrip;base64,${Buffer.from(mergedSrtString).toString('base64')}`;
+
+                 // Return the single merged subtitle entry
+                 return {
+                     subtitles: [{
+                         id: `merged-${mainSubInfo.id}-${transSubInfo.id}`,
+                         url: mergedSubDataUri,
+                         lang: `${mainLang}+${transLang}`, // Custom lang code for dual subs
+                         name: `[${mainLang.toUpperCase()}/${transLang.toUpperCase()}] Dual Subtitle`
+                     }],
+                     cacheMaxAge: 6 * 3600, // Cache for 6 hours
+                     staleRevalidate: 24 * 3600 // Allow stale for 1 day
+                 };
+                 // --- End Merging Logic ---
 
             } catch (error) {
                 console.error('Error in subtitle handler:', error.message, error.stack);
@@ -635,47 +660,13 @@ process.on('SIGINT', () => {
             }
         });
 
-        // --- Define Route to Serve Cached Subtitles ---
-        app.get('/subtitles/:id.srt', (req, res) => {
-            const id = req.params.id;
-            const entry = subtitleCache.get(id);
-
-            if (entry && Date.now() <= entry.expires) {
-                console.log(`Serving cached subtitle: ${id}`);
-                res.header('Content-Type', 'text/srt;charset=utf-8'); // Set correct content type and charset
-                res.send(entry.content);
-                // Optionally remove from cache after first access if desired
-                // subtitleCache.delete(id);
-            } else {
-                console.log(`Subtitle not found or expired: ${id}`);
-                subtitleCache.delete(id); // Clean up if expired but not caught by interval
-                res.status(404).send('Subtitle not found or expired.');
-            }
-        });
-
-        // --- Use SDK Handler as Middleware ---
-        // Get the SDK's request handler
-        const sdkHandler = serveHTTP(builder.getInterface(), { cacheMaxAge: 300 }); // Cache manifest etc. briefly
-        app.use((req, res, next) => {
-            // Check if the request is for our custom subtitle route
-            if (req.path.startsWith('/subtitles/')) {
-                return next(); // Let our specific route handle it
-            }
-            // Otherwise, pass to the SDK handler
-            sdkHandler(req, res, next);
-        });
-
-        // --- Start Express Server ---
-        app.listen(ADDON_PORT, () => {
-            console.log(`Strelingo Addon with Express server running on port ${ADDON_PORT}`);
-            // Provide the manifest URL based on the determined base URL
-            console.log(`Manifest URL: ${ADDON_BASE_URL}/manifest.json`);
-        });
+        // --- Start Server (Inside IIFE) ---
+        serveHTTP(builder.getInterface(), { port: ADDON_PORT });
 
     } catch (err) {
         console.error("Failed to import srt-parser-2 or setup addon:", err);
-        process.exit(1);
+        process.exit(1); // Exit if essential import fails
     }
 })();
 
-console.log("Addon script initialized. Waiting for ESM import and server start..."); 
+console.log("Addon script initialized. Waiting for ESM import and server start..."); // Log outside IIFE 
