@@ -6,7 +6,12 @@ const pako = require('pako');
 const { Buffer } = require('buffer');
 const chardet = require('chardet');
 const iconv = require('iconv-lite');
-const { put } = require('@vercel/blob');
+const { put, client } = require('@vercel/blob');
+
+// Configure Vercel Blob client with custom token
+const blobClient = client({
+    token: process.env.STRELINGO_READ_WRITE_TOKEN
+});
 
 // OpenSubtitles API base URL
 const OPENSUBS_API_URL = 'https://rest.opensubtitles.org';
@@ -640,9 +645,8 @@ process.on('SIGINT', () => {
 
                  console.log("Uploading merged subtitles to Vercel Blob...");
                  try {
-                     // Upload the SRT content to Vercel Blob
-                     // The pathname includes unique identifiers to prevent collisions
-                     const { url } = await put(
+                     // Upload the SRT content to Vercel Blob using configured client
+                     const { url } = await blobClient.put(
                          `subtitles/${mainSubInfo.id}-${transSubInfo.id}.srt`,
                          mergedSrtString,
                          { access: 'public', addRandomSuffix: true }
