@@ -6,12 +6,7 @@ const pako = require('pako');
 const { Buffer } = require('buffer');
 const chardet = require('chardet');
 const iconv = require('iconv-lite');
-const { put, createClient } = require('@vercel/blob');
-
-// Configure Vercel Blob client with custom token
-const blobClient = createClient({
-    token: process.env.STRELINGO_READ_WRITE_TOKEN
-});
+const { put } = require('@vercel/blob');
 
 // OpenSubtitles API base URL
 const OPENSUBS_API_URL = 'https://rest.opensubtitles.org';
@@ -543,133 +538,124 @@ process.on('SIGINT', () => {
 
                 // Check if we got metadata for both
                 if (!mainSubInfo || !transSubInfo) {
-                     console.log("Could not find subtitle metadata for both requested languages.");
-                     // Try returning only main if found
-                     if (mainSubInfo?.url) {
-                          console.warn("Could not get translation metadata. Attempting to return only main subtitle.");
-                          const mainContentAlone = await fetchSubtitleContent(mainSubInfo.url);
-                          if (mainContentAlone) {
-                              // Use Base64 encoding for the Data URI
-                              const mainDataUriAlone = `data:application/x-subrip;base64,${Buffer.from(mainContentAlone).toString('base64')}`;
-                              return {
-                                 subtitles: [{
-                                     id: mainSubInfo.id,
-                                     url: mainDataUriAlone,
-                                     lang: mainLang,
-                                     name: `[${mainLang.toUpperCase()}] ${mainSubInfo.releaseName || 'Main Subtitle'} (No Translation Found)`
-                                  }],
-                                 cacheMaxAge: 3600
-                              };
-                          }
-                     }
-                     return { subtitles: [], cacheMaxAge: 60 }; // Cache failure briefly
+                    console.log("Could not find subtitle metadata for both requested languages.");
+                    // Try returning only main if found
+                    if (mainSubInfo?.url) {
+                        console.warn("Could not get translation metadata. Attempting to return only main subtitle.");
+                        const mainContentAlone = await fetchSubtitleContent(mainSubInfo.url);
+                        if (mainContentAlone) {
+                            // Upload the main subtitle content to Vercel Blob
+                            const { url } = await put(
+                                `${imdbId}_${mainLang}.srt`,
+                                mainContentAlone,
+                                { access: 'public', addRandomSuffix: true }
+                            );
+                            return {
+                                subtitles: [{
+                                    id: mainSubInfo.id,
+                                    url: url,
+                                    lang: mainLang
+                                }],
+                                cacheMaxAge: 3600
+                            };
+                        }
+                    }
+                    return { subtitles: [], cacheMaxAge: 60 }; // Cache failure briefly
                 }
 
-                console.log(`Selected Main Subtitle (${mainLang}): ID=${mainSubInfo.id}, Lang=${mainSubInfo.langName}, Rating=${mainSubInfo.rating}, Format=${mainSubInfo.format}, URL=${mainSubInfo.url}`);
-                console.log(`Selected Translation Subtitle (${transLang}): ID=${transSubInfo.id}, Lang=${transSubInfo.langName}, Rating=${transSubInfo.rating}, Format=${transSubInfo.format}, URL=${transSubInfo.url}`);
+                console.log(`Selected Main Subtitle (${mainLang}): ID=${mainSubInfo.id}, Lang=${mainSubInfo.langName}, Rating=${mainSubInfo.rating}, Format=${mainSubInfo.format}`);
+                console.log(`Selected Translation Subtitle (${transLang}): ID=${transSubInfo.id}, Lang=${transSubInfo.langName}, Rating=${transSubInfo.rating}, Format=${transSubInfo.format}`);
 
-                 // --- Fetch Content, Parse, Merge ---
-                 console.log("Fetching subtitle content...");
-                 const [mainSubContent, transSubContent] = await Promise.all([
-                     fetchSubtitleContent(mainSubInfo.url),
-                     fetchSubtitleContent(transSubInfo.url)
-                 ]);
+                // --- Fetch Content, Parse, Merge ---
+                console.log("Fetching subtitle content...");
+                const [mainSubContent, transSubContent] = await Promise.all([
+                    fetchSubtitleContent(mainSubInfo.url),
+                    fetchSubtitleContent(transSubInfo.url)
+                ]);
 
-                 if (!mainSubContent || !transSubContent) {
-                     console.error("Failed to fetch content for one or both subtitles.");
-                      // Try returning only main if content available
-                      if (mainSubContent && mainSubInfo?.url) {
-                           console.warn("Failed to fetch translation content. Returning only main subtitle.");
-                           const mainDataUriAlone = `data:application/x-subrip;base64,${Buffer.from(mainSubContent).toString('base64')}`;
-                           return {
-                              subtitles: [{
-                                  id: mainSubInfo.id,
-                                  url: mainDataUriAlone,
-                                  lang: mainLang,
-                                  name: `[${mainLang.toUpperCase()}] ${mainSubInfo.releaseName || 'Main Subtitle'} (Translation Fetch Failed)`
-                               }],
-                              cacheMaxAge: 3600
-                           };
-                      }
-                     return { subtitles: [], cacheMaxAge: 60 };
-                 }
+                if (!mainSubContent || !transSubContent) {
+                    console.error("Failed to fetch content for one or both subtitles.");
+                    // Try returning only main if content available
+                    if (mainSubContent) {
+                        console.warn("Failed to fetch translation content. Returning only main subtitle.");
+                        const { url } = await put(
+                            `${imdbId}_${mainLang}.srt`,
+                            mainSubContent,
+                            { access: 'public', addRandomSuffix: true }
+                        );
+                        return {
+                            subtitles: [{
+                                id: mainSubInfo.id,
+                                url: url,
+                                lang: mainLang
+                            }],
+                            cacheMaxAge: 3600
+                        };
+                    }
+                    return { subtitles: [], cacheMaxAge: 60 };
+                }
 
-                 console.log("Parsing subtitles...");
-                 if (mainSubInfo.format?.toLowerCase() !== 'srt' || transSubInfo.format?.toLowerCase() !== 'srt') {
-                     console.warn(`One or both subtitles are not SRT (${mainSubInfo.format}, ${transSubInfo.format}). Merging assumes SRT structure. Results may be inaccurate.`);
-                 }
+                console.log("Parsing subtitles...");
+                const mainParsed = parseSrt(mainSubContent);
+                const transParsed = parseSrt(transSubContent);
 
-                 // Now call the parseSrt defined within the IIFE scope
-                 const mainParsed = parseSrt(mainSubContent);
-                 const transParsed = parseSrt(transSubContent);
+                if (!mainParsed || !transParsed) {
+                    console.error("Failed to parse one or both subtitles.");
+                    if (mainParsed) {
+                        console.warn("Translation subtitle failed parsing. Returning only the main subtitle.");
+                        const formattedMain = formatSrt(mainParsed);
+                        if (formattedMain) {
+                            const { url } = await put(
+                                `${imdbId}_${mainLang}.srt`,
+                                formattedMain,
+                                { access: 'public', addRandomSuffix: true }
+                            );
+                            return {
+                                subtitles: [{
+                                    id: mainSubInfo.id,
+                                    url: url,
+                                    lang: mainLang
+                                }],
+                                cacheMaxAge: 3600
+                            };
+                        }
+                    }
+                    return { subtitles: [], cacheMaxAge: 60 };
+                }
 
-                 if (!mainParsed || !transParsed) {
-                     console.error("Failed to parse one or both subtitles.");
-                      if (mainParsed && mainSubInfo?.url) {
-                          console.warn("Translation subtitle failed parsing. Returning only the main subtitle.");
-                            const formattedMain = formatSrt(mainParsed);
-                            if (formattedMain) {
-                                 const mainSubDataUri = `data:application/x-subrip;base64,${Buffer.from(formattedMain).toString('base64')}`;
-                                 return {
-                                     subtitles: [{
-                                         id: mainSubInfo.id,
-                                         url: mainSubDataUri,
-                                         lang: mainLang,
-                                         name: `[${mainLang.toUpperCase()}] ${mainSubInfo.releaseName || 'Main Subtitle'} (Translation Parse Failed)`
-                                      }],
-                                     cacheMaxAge: 3600
-                                  };
-                            } else {
-                                 console.error("Failed to re-format main subtitle after translation parse failure.");
-                            }
-                      }
-                     return { subtitles: [], cacheMaxAge: 60 };
-                 }
+                console.log("Merging subtitles...");
+                const mergedParsed = mergeSubtitles(mainParsed, transParsed);
 
-                 console.log("Merging subtitles...");
-                 // Call mergeSubtitles (defined outside IIFE)
-                 const mergedParsed = mergeSubtitles(mainParsed, transParsed);
+                if (!mergedParsed || mergedParsed.length === 0) {
+                    console.error("Merging resulted in empty subtitles.");
+                    return { subtitles: [], cacheMaxAge: 60 };
+                }
 
-                 if (!mergedParsed || mergedParsed.length === 0) {
-                     console.error("Merging resulted in empty subtitles.");
-                     return { subtitles: [], cacheMaxAge: 60 };
-                 }
+                console.log("Formatting merged subtitles to SRT...");
+                const mergedSrtString = formatSrt(mergedParsed);
 
-                 console.log("Formatting merged subtitles to SRT...");
-                 const mergedSrtString = formatSrt(mergedParsed);
+                if (!mergedSrtString) {
+                    console.error("Failed to format merged subtitles back to SRT.");
+                    return { subtitles: [], cacheMaxAge: 60 };
+                }
 
-                 if (!mergedSrtString) {
-                     console.error("Failed to format merged subtitles back to SRT.");
-                     return { subtitles: [], cacheMaxAge: 60 };
-                 }
+                // Upload the merged subtitle content to Vercel Blob
+                const { url } = await put(
+                    `${imdbId}_${mainLang}_${transLang}.srt`,
+                    mergedSrtString,
+                    { access: 'public', addRandomSuffix: true }
+                );
 
-                 console.log("Uploading merged subtitles to Vercel Blob...");
-                 try {
-                     // Upload the SRT content to Vercel Blob using configured client
-                     const { url } = await blobClient.put(
-                         `subtitles/${mainSubInfo.id}-${transSubInfo.id}.srt`,
-                         mergedSrtString,
-                         { access: 'public', addRandomSuffix: true }
-                     );
-
-                     console.log(`Subtitle file uploaded to: ${url}`);
-
-                     // Return the single merged subtitle entry with the Vercel Blob URL
-                     return {
-                         subtitles: [{
-                             id: `merged-${mainSubInfo.id}-${transSubInfo.id}`,
-                             url: url,
-                             lang: `${mainLang}+${transLang}`, // Custom lang code for dual subs
-                             name: `[${mainLang.toUpperCase()}/${transLang.toUpperCase()}] Dual Subtitle`
-                         }],
-                         cacheMaxAge: 6 * 3600, // Cache for 6 hours
-                         staleRevalidate: 24 * 3600 // Allow stale for 1 day
-                     };
-                 } catch (uploadError) {
-                     console.error("Failed to upload subtitle file to Vercel Blob:", uploadError);
-                     return { subtitles: [], cacheMaxAge: 60 };
-                 }
-                 // --- End Merging Logic ---
+                // Return the single merged subtitle entry with the Blob URL
+                return {
+                    subtitles: [{
+                        id: `merged-${mainSubInfo.id}-${transSubInfo.id}`,
+                        url: url,
+                        lang: `${mainLang}+${transLang}`
+                    }],
+                    cacheMaxAge: 6 * 3600, // Cache for 6 hours
+                    staleRevalidate: 24 * 3600 // Allow stale for 1 day
+                };
 
             } catch (error) {
                 console.error('Error in subtitle handler:', error.message, error.stack);
