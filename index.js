@@ -6,12 +6,23 @@ const pako = require('pako');
 const { Buffer } = require('buffer');
 const chardet = require('chardet');
 const iconv = require('iconv-lite');
+const fs = require('fs');
+const path = require('path');
+const crypto = require('crypto');
 
 // OpenSubtitles API base URL
 const OPENSUBS_API_URL = 'https://rest.opensubtitles.org';
 
 // Configuration
 const ADDON_PORT = process.env.PORT || 7000;
+const HOST = process.env.HOST || 'localhost';
+const ADDON_URL = process.env.ADDON_URL || `http://${HOST}:${ADDON_PORT}`;
+const TEMP_DIR = process.env.TEMP_DIR || path.join(__dirname, 'temp');
+
+// Create temp directory if it doesn't exist
+if (!fs.existsSync(TEMP_DIR)) {
+    fs.mkdirSync(TEMP_DIR, { recursive: true });
+}
 
 // Rate limiting
 const requestQueue = [];
@@ -417,6 +428,13 @@ process.on('SIGINT', () => {
         const { default: SRTParser2 } = await import('srt-parser-2');
         console.log("Successfully imported srt-parser-2.");
 
+        // Create an express app
+        const express = require('express');
+        const app = express();
+
+        // Serve static subtitle files from the temp directory
+        app.use('/subtitles', express.static(TEMP_DIR));
+
         // --- Parser Dependent Helpers (Define inside IIFE) ---
 
         // Formats an array of subtitle objects back into SRT text
@@ -485,6 +503,19 @@ process.on('SIGINT', () => {
                 console.error('Error parsing SRT:', error.message);
                 return null;
             }
+        }
+
+        // --- Save Subtitle to File ---
+        function saveSubtitleToFile(content, id, mainLang, transLang) {
+            // Generate a unique filename based on parameters
+            const filename = `${id}_${mainLang}_${transLang}_${Date.now()}.srt`;
+            const filepath = path.join(TEMP_DIR, filename);
+            
+            // Write subtitle content to file
+            fs.writeFileSync(filepath, content);
+            
+            // Return the filename (not the full path)
+            return filename;
         }
 
         // --- Define Addon Handler (Inside IIFE) ---
@@ -630,7 +661,6 @@ process.on('SIGINT', () => {
                  }
 
                  console.log("Formatting merged subtitles to SRT...");
-                 // Call formatSrt (defined inside IIFE)
                  const mergedSrtString = formatSrt(mergedParsed);
 
                  if (!mergedSrtString) {
@@ -638,35 +668,74 @@ process.on('SIGINT', () => {
                      return { subtitles: [], cacheMaxAge: 60 };
                  }
 
-                 console.log("Creating Data URI for merged subtitles...");
-                 const mergedSubDataUri = `data:application/x-subrip;base64,${Buffer.from(mergedSrtString).toString('base64')}`;
+                 // Save merged subtitles to a temporary file instead of using Data URI
+                 console.log("Saving merged subtitles to file...");
+                 const subtitleFilename = saveSubtitleToFile(
+                     mergedSrtString, 
+                     `${mainSubInfo.id}-${transSubInfo.id}`,
+                     mainLang,
+                     transLang
+                 );
 
-                 // Return the single merged subtitle entry
+                 // Create a URL to the subtitle file using the base addon URL
+                 const subtitleUrl = `${ADDON_URL}/subtitles/${subtitleFilename}`;
+                 console.log(`Created subtitle URL: ${subtitleUrl}`);
+
+                 // Return the subtitle entry with the file URL
                  return {
                      subtitles: [{
                          id: `merged-${mainSubInfo.id}-${transSubInfo.id}`,
-                         url: mergedSubDataUri,
-                         lang: `${mainLang}+${transLang}`, // Custom lang code for dual subs
+                         url: subtitleUrl,
+                         lang: `${mainLang}+${transLang}`,
                          name: `[${mainLang.toUpperCase()}/${transLang.toUpperCase()}] Dual Subtitle`
                      }],
-                     cacheMaxAge: 6 * 3600, // Cache for 6 hours
-                     staleRevalidate: 24 * 3600 // Allow stale for 1 day
+                     cacheMaxAge: 6 * 3600,
+                     staleRevalidate: 24 * 3600
                  };
                  // --- End Merging Logic ---
 
             } catch (error) {
                 console.error('Error in subtitle handler:', error.message, error.stack);
-                return { subtitles: [], cacheMaxAge: 60 }; // Cache failure briefly
+                return { subtitles: [], cacheMaxAge: 60 };
             }
         });
 
-        // --- Start Server (Inside IIFE) ---
-        serveHTTP(builder.getInterface(), { port: ADDON_PORT });
+        // Setup cleanup of old subtitle files
+        const cleanupOldFiles = () => {
+            try {
+                const now = Date.now();
+                const files = fs.readdirSync(TEMP_DIR);
+                
+                files.forEach(file => {
+                    const filePath = path.join(TEMP_DIR, file);
+                    const stats = fs.statSync(filePath);
+                    const fileAge = now - stats.mtimeMs;
+                    
+                    // Remove files older than 6 hours (21600000 ms)
+                    if (fileAge > 21600000) {
+                        fs.unlinkSync(filePath);
+                        console.log(`Cleaned up old subtitle file: ${file}`);
+                    }
+                });
+            } catch (error) {
+                console.error('Error cleaning up old subtitle files:', error);
+            }
+        };
+
+        // Run cleanup every hour
+        setInterval(cleanupOldFiles, 3600000);
+
+        // Use the SDK's serveHTTP with our express app
+        serveHTTP(builder.getInterface(), { server: app.listen(ADDON_PORT) });
+        
+        console.log(`Strelingo Addon running at ${ADDON_URL}/manifest.json`);
+        console.log(`To install in Stremio, open: stremio://addon/${encodeURIComponent(ADDON_URL)}/manifest.json`);
+        console.log("Subtitles will be served from the temp directory:", TEMP_DIR);
 
     } catch (err) {
         console.error("Failed to import srt-parser-2 or setup addon:", err);
-        process.exit(1); // Exit if essential import fails
+        process.exit(1);
     }
 })();
 
-console.log("Addon script initialized. Waiting for ESM import and server start..."); // Log outside IIFE 
+console.log("Addon script initialized. Waiting for ESM import and server start..."); 
