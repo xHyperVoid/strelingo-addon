@@ -14,6 +14,7 @@ const OPENSUBS_API_URL = 'https://rest.opensubtitles.org';
 
 // Configuration
 const ADDON_PORT = process.env.PORT || 7000;
+const ADDON_BASE_URL = process.env.ADDON_URL || `http://localhost:${ADDON_PORT}`;
 
 // Rate limiting
 const requestQueue = [];
@@ -602,20 +603,21 @@ process.on('SIGINT', () => {
                 // --- Generate Temporary Link --- START
                 console.log("Generating temporary link for merged subtitles...");
                 const uniqueId = crypto.randomBytes(16).toString('hex');
-                const temporaryUrl = `/subtitles/${uniqueId}.srt`; // Relative URL
+                const temporaryPath = `/subtitles/${uniqueId}.srt`;
+                const absoluteUrl = `${ADDON_BASE_URL}${temporaryPath}`; // Construct absolute URL
                 const cacheEntry = {
                     content: mergedSrtString,
                     expires: Date.now() + SUBTITLE_CACHE_TTL_MS
                 };
                 subtitleCache.set(uniqueId, cacheEntry);
-                console.log(`Cached subtitle ${uniqueId}, URL: ${temporaryUrl}`);
+                console.log(`Cached subtitle ${uniqueId}, URL: ${absoluteUrl}`); // Log absolute URL
                 // --- Generate Temporary Link --- END
 
                 // Return the single merged subtitle entry with the temporary URL
                 return {
                     subtitles: [{
                         id: `merged-${mainSubInfo.id}-${transSubInfo.id}`,
-                        url: temporaryUrl, // Use the relative temporary URL
+                        url: absoluteUrl, // Use the absolute temporary URL
                         lang: `${mainLang}+${transLang}`, // Custom lang code for dual subs
                         name: `[${mainLang.toUpperCase()}/${transLang.toUpperCase()}] Strelingo Dual Subtitle`
                     }],
@@ -662,7 +664,7 @@ process.on('SIGINT', () => {
         app.listen(ADDON_PORT, () => {
             console.log(`Strelingo Addon with Express server running on port ${ADDON_PORT}`);
             // Provide the manifest URL for installation
-            console.log(`Manifest URL: http://localhost:${ADDON_PORT}/manifest.json`);
+            console.log(`Manifest URL: ${ADDON_BASE_URL}/manifest.json`);
         });
 
     } catch (err) {
