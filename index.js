@@ -670,7 +670,7 @@ process.on('SIGINT', () => {
                         finalSubtitles.push({
                             id: `merged-${mainSubInfo.id}-${transSubInfo.id}`,
                             url: url,
-                            lang: `${mainLang}+${transLang} (v${version} - ${transSubInfo.downloads}d)` // Added version and downloads
+                            lang: `${mainLang}+${transLang}` // Use consistent lang code for grouping
                         });
                     } catch (uploadError) {
                         console.error(`Failed to upload merged SRT for v${version}: ${uploadError.message}`);
