@@ -84,7 +84,7 @@ function executeWithRateLimit(fn, resolve, reject) {
     } else {
         // Queue the request for the next minute
         requestQueue.push({ resolve, reject, fn });
-        console.log(`Rate limit reached. Queued request. Queue size: ${requestQueue.length}`);
+        // console.log(`Rate limit reached. Queued request. Queue size: ${requestQueue.length}`);
     }
 }
 
@@ -104,7 +104,7 @@ function withRateLimit(fn) {
 async function fetchAndSelectSubtitle(languageId, baseSearchParams) {
     const searchParams = { ...baseSearchParams, sublanguageid: languageId };
     const searchUrl = buildSearchUrl(searchParams);
-    console.log(`Searching ${languageId} subtitles at: ${searchUrl}`);
+    // console.log(`Searching ${languageId} subtitles at: ${searchUrl}`);
 
     try {
         const response = await withRateLimit(() =>
@@ -115,7 +115,7 @@ async function fetchAndSelectSubtitle(languageId, baseSearchParams) {
         );
 
         if (!response.data || !Array.isArray(response.data) || response.data.length === 0) {
-            console.log(`No ${languageId} subtitles found or invalid API response.`);
+            // console.log(`No ${languageId} subtitles found or invalid API response.`);
             return null;
         }
 
@@ -127,7 +127,7 @@ async function fetchAndSelectSubtitle(languageId, baseSearchParams) {
         );
 
         if (validFormatSubs.length === 0) {
-             console.log(`No suitable subtitle format found for ${languageId}.`);
+             // console.log(`No suitable subtitle format found for ${languageId}.`);
              return null;
         }
 
@@ -144,7 +144,7 @@ async function fetchAndSelectSubtitle(languageId, baseSearchParams) {
              let subtitleUrl = directUrl;
              // Note: No special handling for .gz here anymore, assuming fetchSubtitleContent handles it
              if (directUrl.endsWith('.gz')) {
-                console.log(`Found gzipped subtitle for ${languageId} (ID: ${sub.IDSubtitleFile}). Fetch function will handle decompression.`);
+                // console.log(`Found gzipped subtitle for ${languageId} (ID: ${sub.IDSubtitleFile}). Fetch function will handle decompression.`);
              }
 
             return {
@@ -159,13 +159,13 @@ async function fetchAndSelectSubtitle(languageId, baseSearchParams) {
             };
         });
 
-        console.log(`Found ${subtitleList.length} valid subtitles for ${languageId}, sorted by downloads.`);
+        // console.log(`Found ${subtitleList.length} valid subtitles for ${languageId}, sorted by downloads.`);
         return subtitleList; // Return the whole sorted list
 
     } catch (error) {
-        console.error(`Error fetching ${languageId} subtitles:`, error.message);
+        // console.error(`Error fetching ${languageId} subtitles:`, error.message);
         if (error.response && error.response.status === 429) {
-            console.log(`Rate limit exceeded from OpenSubtitles API while fetching ${languageId}`);
+            // console.log(`Rate limit exceeded from OpenSubtitles API while fetching ${languageId}`);
         }
         return null; // Return null on error
     }
@@ -176,7 +176,7 @@ async function fetchAndSelectSubtitle(languageId, baseSearchParams) {
 
 // Fetches subtitle content from URL, handles potential gzip and encoding
 async function fetchSubtitleContent(url) {
-    console.log(`Fetching subtitle content from: ${url}`);
+    // console.log(`Fetching subtitle content from: ${url}`);
     try {
         const response = await axios.get(url, {
             responseType: 'arraybuffer', // Important for binary data
@@ -188,10 +188,10 @@ async function fetchSubtitleContent(url) {
 
         // 1. Handle Gzip decompression first
         if (url.endsWith('.gz') || (contentBuffer.length > 2 && contentBuffer[0] === 0x1f && contentBuffer[1] === 0x8b)) {
-            console.log(`Decompressing gzipped subtitle: ${url}`);
+            // console.log(`Decompressing gzipped subtitle: ${url}`);
             try {
                 contentBuffer = Buffer.from(pako.ungzip(contentBuffer)); // Decompress into a new buffer
-                console.log(`Decompressed size: ${contentBuffer.length}`);
+                // console.log(`Decompressed size: ${contentBuffer.length}`);
             } catch (unzipError) {
                 console.error(`Error decompressing subtitle ${url}: ${unzipError.message}`);
                 return null; // Failed decompression
@@ -205,7 +205,7 @@ async function fetchSubtitleContent(url) {
         try {
             // chardet.detect expects a Buffer
             rawDetectedEncoding = chardet.detect(contentBuffer);
-            console.log(`chardet raw detection: encoding=${rawDetectedEncoding}`); // Log raw detection
+            // console.log(`chardet raw detection: encoding=${rawDetectedEncoding}`); // Log raw detection
 
             if (rawDetectedEncoding) {
                 const normalizedEncoding = rawDetectedEncoding.toLowerCase();
@@ -239,40 +239,40 @@ async function fetchSubtitleContent(url) {
                         if (iconv.encodingExists(normalizedEncoding)) {
                             detectedEncoding = normalizedEncoding;
                         } else {
-                            console.warn(`Detected encoding '${rawDetectedEncoding}' not directly supported by iconv-lite or mapped. Falling back to UTF-8.`);
+                            // console.warn(`Detected encoding '${rawDetectedEncoding}' not directly supported by iconv-lite or mapped. Falling back to UTF-8.`);
                             detectedEncoding = 'utf8'; // Fallback if unknown
                         }
                 }
-                console.log(`Detected encoding: ${rawDetectedEncoding}, using: ${detectedEncoding}`);
+                // console.log(`Detected encoding: ${rawDetectedEncoding}, using: ${detectedEncoding}`);
             } else {
-                console.log(`Encoding detection failed for ${url}. Defaulting to UTF-8.`);
+                // console.log(`Encoding detection failed for ${url}. Defaulting to UTF-8.`);
                 // Try to remove potential BOM manually if UTF-8 is assumed
                 if(contentBuffer.length > 3 && contentBuffer[0] === 0xEF && contentBuffer[1] === 0xBB && contentBuffer[2] === 0xBF) {
-                    console.log("Found UTF-8 BOM, removing it before potential decode.");
+                    // console.log("Found UTF-8 BOM, removing it before potential decode.");
                     contentBuffer = contentBuffer.subarray(3);
                 }
             }
         } catch (detectionError) {
-            console.warn(`Error during encoding detection for ${url}: ${detectionError.message}. Defaulting to UTF-8.`);
+            // console.warn(`Error during encoding detection for ${url}: ${detectionError.message}. Defaulting to UTF-8.`);
         }
 
         // 3. Decode using detected or default encoding
         try {
             // iconv-lite handles BOMs for UTF-8, UTF-16LE, UTF-16BE automatically
             subtitleText = iconv.decode(contentBuffer, detectedEncoding);
-            console.log(`Successfully decoded subtitle ${url} using ${detectedEncoding}.`);
+            // console.log(`Successfully decoded subtitle ${url} using ${detectedEncoding}.`);
 
             // Optional: If it was detected as UTF-8, double check for the FEFF char code just in case
             // iconv *should* handle this, but as a safeguard:
             if (detectedEncoding === 'utf8' && subtitleText.charCodeAt(0) === 0xFEFF) {
-                 console.log("Found BOM character after UTF-8 decode, removing it.");
+                 // console.log("Found BOM character after UTF-8 decode, removing it.");
                  subtitleText = subtitleText.substring(1);
             }
 
         } catch (decodeError) {
-            console.error(`Error decoding subtitle ${url} with encoding ${detectedEncoding}: ${decodeError.message}`);
+            // console.error(`Error decoding subtitle ${url} with encoding ${detectedEncoding}: ${decodeError.message}`);
             // Fallback attempt: try decoding as Latin1 (ISO-8859-1) if initial decode failed
-            console.warn(`Falling back to latin1 decoding for ${url}`);
+            // console.warn(`Falling back to latin1 decoding for ${url}`);
             try {
                  subtitleText = iconv.decode(contentBuffer, 'latin1');
             } catch (fallbackError) {
@@ -281,13 +281,13 @@ async function fetchSubtitleContent(url) {
             }
         }
 
-        console.log(`Successfully fetched and processed subtitle: ${url}`);
+        // console.log(`Successfully fetched and processed subtitle: ${url}`);
         return subtitleText;
 
     } catch (error) {
-        console.error(`Error fetching subtitle content from ${url}:`, error.message);
+        // console.error(`Error fetching subtitle content from ${url}:`, error.message);
         if (error.response) {
-            console.error(`Status: ${error.response.status}, Headers: ${JSON.stringify(error.response.headers)}`);
+            // console.error(`Status: ${error.response.status}, Headers: ${JSON.stringify(error.response.headers)}`);
         }
         return null;
     }
@@ -297,7 +297,7 @@ async function fetchSubtitleContent(url) {
 function parseTimeToMs(timeString) {
     // Added validation for the time string format
     if (!timeString || !/\d{2}:\d{2}:\d{2},\d{3}/.test(timeString)) {
-        console.error(`Invalid time format encountered: ${timeString}`);
+        // console.error(`Invalid time format encountered: ${timeString}`);
         return 0; // Return 0 or throw error, depending on desired strictness
     }
     const parts = timeString.split(':');
@@ -311,7 +311,7 @@ function parseTimeToMs(timeString) {
 
 // Merges two arrays of parsed subtitles based on time
 function mergeSubtitles(mainSubs, transSubs, mergeThresholdMs = 500) {
-    console.log(`Merging ${mainSubs.length} main subs with ${transSubs.length} translation subs.`);
+    // console.log(`Merging ${mainSubs.length} main subs with ${transSubs.length} translation subs.`);
     const mergedSubs = [];
     let transIndex = 0;
 
@@ -322,7 +322,7 @@ function mergeSubtitles(mainSubs, transSubs, mergeThresholdMs = 500) {
 
         // Ensure mainSub is valid before processing
         if (!mainSub || !mainSub.startTime || !mainSub.endTime) {
-            console.warn("Skipping invalid main subtitle entry:", mainSub);
+            // console.warn("Skipping invalid main subtitle entry:", mainSub);
             continue;
         }
 
@@ -335,7 +335,7 @@ function mergeSubtitles(mainSubs, transSubs, mergeThresholdMs = 500) {
 
             // Ensure transSub is valid
             if (!transSub || !transSub.startTime || !transSub.endTime) {
-                console.warn("Skipping invalid translation subtitle entry:", transSub);
+                // console.warn("Skipping invalid translation subtitle entry:", transSub);
                 continue;
             }
 
@@ -395,7 +395,7 @@ function mergeSubtitles(mainSubs, transSubs, mergeThresholdMs = 500) {
             });
         }
     }
-    console.log(`Finished merging. Result has ${mergedSubs.length} entries.`);
+    // console.log(`Finished merging. Result has ${mergedSubs.length} entries.`);
     return mergedSubs;
 }
 
@@ -433,14 +433,14 @@ process.on('SIGINT', () => {
     try {
         // Dynamically import the ESM module
         const { default: SRTParser2 } = await import('srt-parser-2');
-        console.log("Successfully imported srt-parser-2.");
+        // console.log("Successfully imported srt-parser-2.");
 
         // --- Parser Dependent Helpers (Define inside IIFE) ---
 
         // Formats an array of subtitle objects back into SRT text
         function formatSrt(subtitleArray) {
             if (!Array.isArray(subtitleArray)) {
-                 console.error("Invalid input to formatSrt: not an array.");
+                 // console.error("Invalid input to formatSrt: not an array.");
                  return null;
             }
             try {
@@ -452,9 +452,9 @@ process.on('SIGINT', () => {
                 }));
                 return parser.toSrt(sanitizedArray);
             } catch (error) {
-                console.error('Error formatting SRT:', error.message);
+                // console.error('Error formatting SRT:', error.message);
                 // Log the problematic structure if possible
-                console.error('Problematic data for formatSrt:', JSON.stringify(subtitleArray.slice(0, 5)));
+                // console.error('Problematic data for formatSrt:', JSON.stringify(subtitleArray.slice(0, 5)));
                 return null;
             }
         }
@@ -462,14 +462,14 @@ process.on('SIGINT', () => {
         // Parses SRT text into an array of objects
         function parseSrt(srtText) {
             if (!srtText || typeof srtText !== 'string') {
-                 console.error("Invalid input to parseSrt: not a string or empty.");
+                 // console.error("Invalid input to parseSrt: not a string or empty.");
                  return null;
             }
             try {
                 const parser = new SRTParser2();
                 // Pre-process: remove BOM if present (should be handled by fetch, but double-check)
                 if(srtText.charCodeAt(0) === 0xFEFF) {
-                     console.log("Found BOM in parseSrt, removing it.");
+                     // console.log("Found BOM in parseSrt, removing it.");
                      srtText = srtText.substring(1);
                 }
                 // Pre-process: normalize line endings
@@ -478,29 +478,31 @@ process.on('SIGINT', () => {
                 const subtitles = parser.fromSrt(srtText);
 
                 if (!Array.isArray(subtitles)) {
-                     console.error("Parsing did not return an array.");
+                     // console.error("Parsing did not return an array.");
                      return null;
                 }
                  if (subtitles.length === 0 && srtText.trim().length > 0) {
-                     console.warn("Parsing resulted in an empty array despite non-empty input.");
+                     // console.warn("Parsing resulted in an empty array despite non-empty input.");
                      return null; // Treat as parse failure if input wasn't just whitespace
                  }
                  // Log the text of the first parsed subtitle entry, if it exists
+                 /*
                  if (subtitles.length > 0) {
                      console.log(`First parsed subtitle text by SRTParser2: [${subtitles[0].text}]`);
                  } else {
                      console.log("SRTParser2 returned an empty array.");
                  }
+                 */
 
                  if (subtitles.length > 0 && (!subtitles[0].startTime || !subtitles[0].text)) {
-                     console.warn("Parsed structure seems invalid (missing startTime or text in first entry).");
+                     // console.warn("Parsed structure seems invalid (missing startTime or text in first entry).");
                      return null;
                  }
 
-                console.log(`Parsed ${subtitles.length} subtitle entries.`);
+                // console.log(`Parsed ${subtitles.length} subtitle entries.`);
                 return subtitles;
             } catch (error) {
-                console.error('Error parsing SRT:', error.message);
+                // console.error('Error parsing SRT:', error.message);
                 return null;
             }
         }
@@ -547,36 +549,36 @@ process.on('SIGINT', () => {
 
             try {
                 // 1. Fetch Main Subtitle Metadata (using the updated function)
-                console.log(`Fetching metadata list for main language: ${mainLang}`);
+                // console.log(`Fetching metadata list for main language: ${mainLang}`);
                 const mainSubInfoList = await fetchAndSelectSubtitle(mainLang, baseSearchParams);
                 if (!mainSubInfoList || mainSubInfoList.length === 0) {
-                    console.log(`No main language (${mainLang}) subtitles found.`);
+                    // console.log(`No main language (${mainLang}) subtitles found.`);
                     return { subtitles: [], cacheMaxAge: 60 };
                 }
                 // Select the best main subtitle (first in the sorted list)
                 const mainSubInfo = mainSubInfoList[0];
-                console.log(`Selected Main Subtitle (${mainLang}): ID=${mainSubInfo.id}, Downloads=${mainSubInfo.downloads}`);
+                // console.log(`Selected Main Subtitle (${mainLang}): ID=${mainSubInfo.id}, Downloads=${mainSubInfo.downloads}`);
 
                 // 2. Fetch Translation Subtitle Metadata List
-                console.log(`Fetching metadata list for translation language: ${transLang}`);
+                // console.log(`Fetching metadata list for translation language: ${transLang}`);
                 const transSubInfoList = await fetchAndSelectSubtitle(transLang, baseSearchParams);
                 if (!transSubInfoList || transSubInfoList.length === 0) {
-                    console.warn(`No translation language (${transLang}) subtitles found. Attempting to return only main subtitle.`);
+                    // console.warn(`No translation language (${transLang}) subtitles found. Attempting to return only main subtitle.`);
                     // --- Fallback: Return only main subtitle ---
                     const mainContent = await fetchSubtitleContent(mainSubInfo.url);
                     if (!mainContent) {
-                        console.error("Failed to fetch main subtitle content for fallback.");
+                        // console.error("Failed to fetch main subtitle content for fallback.");
                         return { subtitles: [], cacheMaxAge: 60 };
                     }
                     // Parse is needed if formatSrt doesn't take raw string
                     const mainParsedFallback = parseSrt(mainContent);
                     if(!mainParsedFallback) {
-                         console.error("Failed to parse main subtitle content for fallback.");
+                         // console.error("Failed to parse main subtitle content for fallback.");
                          return { subtitles: [], cacheMaxAge: 60 };
                     }
                     const formattedMain = formatSrt(mainParsedFallback); // Format back to ensure clean SRT
                     if (!formattedMain) {
-                         console.error("Failed to format main subtitle content for fallback.");
+                         // console.error("Failed to format main subtitle content for fallback.");
                          return { subtitles: [], cacheMaxAge: 60 };
                     }
                     const { url: mainUrl } = await put(`${imdbId}_${mainLang}_mainOnly.srt`, formattedMain, { access: 'public', addRandomSuffix: true });
@@ -595,27 +597,27 @@ process.on('SIGINT', () => {
                     if (!usedTransUrls.has(transSub.url)) {
                         selectedTransSubs.push(transSub);
                         usedTransUrls.add(transSub.url);
-                        console.log(`Selected translation candidate #${selectedTransSubs.length}: ID=${transSub.id}, Downloads=${transSub.downloads}, URL=${transSub.url}`);
+                        // console.log(`Selected translation candidate #${selectedTransSubs.length}: ID=${transSub.id}, Downloads=${transSub.downloads}, URL=${transSub.url}`);
                     }
                 }
 
                 if (selectedTransSubs.length === 0) {
-                    console.error("Found translation metadata, but failed to select any unique candidates (this shouldn't happen if list was not empty).");
+                    // console.error("Found translation metadata, but failed to select any unique candidates (this shouldn't happen if list was not empty).");
                      // Consider fallback to main subtitle here as well?
                     return { subtitles: [], cacheMaxAge: 60 };
                 }
 
                 // 4. Fetch and Parse Main Subtitle Content ONCE
-                console.log("Fetching main subtitle content...");
+                // console.log("Fetching main subtitle content...");
                 const mainSubContent = await fetchSubtitleContent(mainSubInfo.url);
                 if (!mainSubContent) {
-                    console.error("Failed to fetch main subtitle content. Cannot proceed.");
+                    // console.error("Failed to fetch main subtitle content. Cannot proceed.");
                     return { subtitles: [], cacheMaxAge: 60 };
                 }
-                console.log("Parsing main subtitle content...");
+                // console.log("Parsing main subtitle content...");
                 const mainParsed = parseSrt(mainSubContent);
                 if (!mainParsed) {
-                    console.error("Failed to parse main subtitle content. Cannot proceed.");
+                    // console.error("Failed to parse main subtitle content. Cannot proceed.");
                     return { subtitles: [], cacheMaxAge: 60 };
                 }
 
@@ -624,47 +626,47 @@ process.on('SIGINT', () => {
                 for (let i = 0; i < selectedTransSubs.length; i++) {
                     const transSubInfo = selectedTransSubs[i];
                     const version = i + 1;
-                    console.log(`Processing translation candidate v${version} (ID: ${transSubInfo.id})...`);
+                    // console.log(`Processing translation candidate v${version} (ID: ${transSubInfo.id})...`);
 
                     // Fetch content
                     const transSubContent = await fetchSubtitleContent(transSubInfo.url);
                     if (!transSubContent) {
-                        console.warn(`Failed to fetch content for translation v${version}. Skipping.`);
+                        // console.warn(`Failed to fetch content for translation v${version}. Skipping.`);
                         continue; // Skip to next candidate
                     }
 
                     // Parse content
                     const transParsed = parseSrt(transSubContent);
                     if (!transParsed) {
-                        console.warn(`Failed to parse content for translation v${version}. Skipping.`);
+                        // console.warn(`Failed to parse content for translation v${version}. Skipping.`);
                         continue; // Skip to next candidate
                     }
 
                     // Merge with main
-                    console.log(`Merging main with translation v${version}...`);
+                    // console.log(`Merging main with translation v${version}...`);
                     const mergedParsed = mergeSubtitles([...mainParsed], transParsed); // Use copy of mainParsed
                     if (!mergedParsed || mergedParsed.length === 0) {
-                        console.warn(`Merging failed or resulted in empty subtitles for v${version}. Skipping.`);
+                        // console.warn(`Merging failed or resulted in empty subtitles for v${version}. Skipping.`);
                         continue; // Skip to next candidate
                     }
 
                     // Format to SRT
-                    console.log(`Formatting merged SRT for v${version}...`);
+                    // console.log(`Formatting merged SRT for v${version}...`);
                     const mergedSrtString = formatSrt(mergedParsed);
                     if (!mergedSrtString) {
-                        console.warn(`Failed to format merged SRT for v${version}. Skipping.`);
+                        // console.warn(`Failed to format merged SRT for v${version}. Skipping.`);
                         continue; // Skip to next candidate
                     }
 
                     // Upload to Blob
-                    console.log(`Uploading merged SRT for v${version} to Blob...`);
+                    // console.log(`Uploading merged SRT for v${version} to Blob...`);
                     try {
                         const { url } = await put(
                             `${imdbId}_${mainLang}_${transLang}_v${version}.srt`,
                             mergedSrtString,
                             { access: 'public', addRandomSuffix: true }
                         );
-                        console.log(`Uploaded v${version} to: ${url}`);
+                        // console.log(`Uploaded v${version} to: ${url}`);
 
                         // Add to results
                         finalSubtitles.push({
@@ -673,14 +675,14 @@ process.on('SIGINT', () => {
                             lang: `${mainLang}+${transLang}` // Use consistent lang code for grouping
                         });
                     } catch (uploadError) {
-                        console.error(`Failed to upload merged SRT for v${version}: ${uploadError.message}`);
+                        // console.error(`Failed to upload merged SRT for v${version}: ${uploadError.message}`);
                         // Don't skip, just log the error, maybe other versions succeed
                     }
                 }
 
                 // 6. Return results
                 if (finalSubtitles.length === 0) {
-                    console.warn("Processed translation candidates, but none resulted in a usable subtitle file. Returning empty.");
+                    // console.warn("Processed translation candidates, but none resulted in a usable subtitle file. Returning empty.");
                      // Consider fallback to main subtitle one last time?
                 }
 
@@ -691,7 +693,7 @@ process.on('SIGINT', () => {
                 };
 
             } catch (error) {
-                console.error('Error in subtitle handler:', error.message, error.stack);
+                // console.error('Error in subtitle handler:', error.message, error.stack);
                 return { subtitles: [], cacheMaxAge: 60 }; // Cache failure briefly
             }
         });
@@ -700,7 +702,7 @@ process.on('SIGINT', () => {
         serveHTTP(builder.getInterface(), { port: ADDON_PORT });
 
     } catch (err) {
-        console.error("Failed to import srt-parser-2 or setup addon:", err);
+        // console.error("Failed to import srt-parser-2 or setup addon:", err);
         process.exit(1); // Exit if essential import fails
     }
 })();
