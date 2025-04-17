@@ -119,21 +119,31 @@ async function fetchAndSelectSubtitle(languageId, baseSearchParams) {
             return null;
         }
 
-        // Find the first valid subtitle (can be improved later, e.g., by rating)
-        const firstValidSubtitle = response.data.find(subtitle =>
+        // Filter for valid subtitle formats first
+        const validFormatSubs = response.data.filter(subtitle =>
             subtitle.SubDownloadLink &&
             subtitle.SubFormat &&
             ['srt', 'vtt', 'sub', 'ass'].includes(subtitle.SubFormat.toLowerCase())
         );
 
-        if (!firstValidSubtitle) {
-            console.log(`No suitable subtitle format found for ${languageId}.`);
-            return null;
+        if (validFormatSubs.length === 0) {
+             console.log(`No suitable subtitle format found for ${languageId}.`);
+             return null;
         }
 
-        // Prepare subtitle object (similar to before, but without complex URL handling for now)
-         const directUrl = firstValidSubtitle.SubDownloadLink;
-         // Basic URL handling for now - merging requires fetching content later
+        // Sort the valid subtitles by download count (descending)
+        validFormatSubs.sort((a, b) => {
+            const downloadsA = parseInt(a.SubDownloadsCnt, 10) || 0;
+            const downloadsB = parseInt(b.SubDownloadsCnt, 10) || 0;
+            return downloadsB - downloadsA; // Sort descending
+        });
+
+        // Select the subtitle with the highest download count (the first one after sorting)
+        const bestSubtitle = validFormatSubs[0];
+        console.log(`Selected subtitle for ${languageId} based on highest downloads (${bestSubtitle.SubDownloadsCnt}): ID=${bestSubtitle.IDSubtitleFile}`);
+
+        // Prepare subtitle object
+         const directUrl = bestSubtitle.SubDownloadLink;
          let subtitleUrl = directUrl;
          if (directUrl.endsWith('.gz')) {
              // Desktop can potentially handle this via streaming server, but we need the raw file for merging
@@ -143,13 +153,14 @@ async function fetchAndSelectSubtitle(languageId, baseSearchParams) {
          }
 
         return {
-            id: firstValidSubtitle.IDSubtitleFile,
+            id: bestSubtitle.IDSubtitleFile,
             url: subtitleUrl, // This URL will be used to *fetch* the content later
-            lang: firstValidSubtitle.SubLanguageID, // Keep original lang ID
-            format: firstValidSubtitle.SubFormat,
-            langName: firstValidSubtitle.LanguageName, // Added for logging
-            releaseName: firstValidSubtitle.MovieReleaseName || firstValidSubtitle.MovieName || 'Unknown',
-            rating: parseFloat(firstValidSubtitle.SubRating) || 0
+            lang: bestSubtitle.SubLanguageID, // Keep original lang ID
+            format: bestSubtitle.SubFormat,
+            langName: bestSubtitle.LanguageName, // Added for logging
+            releaseName: bestSubtitle.MovieReleaseName || bestSubtitle.MovieName || 'Unknown',
+            rating: parseFloat(bestSubtitle.SubRating) || 0,
+            downloads: parseInt(bestSubtitle.SubDownloadsCnt, 10) || 0 // Added downloads count
         };
 
     } catch (error) {
