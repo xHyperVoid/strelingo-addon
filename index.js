@@ -100,23 +100,23 @@ function withRateLimit(fn) {
     });
 }
 
-// --- Helper Function to Fetch Subtitle Candidates ---
-async function fetchSubtitleCandidates(languageId, baseSearchParams) {
+// --- Helper Function to Fetch and Select Subtitle ---
+async function fetchAndSelectSubtitle(languageId, baseSearchParams) {
     const searchParams = { ...baseSearchParams, sublanguageid: languageId };
     const searchUrl = buildSearchUrl(searchParams);
-    console.log(`Searching ${languageId} subtitle candidates at: ${searchUrl}`);
+    console.log(`Searching ${languageId} subtitles at: ${searchUrl}`);
 
     try {
         const response = await withRateLimit(() =>
             axios.get(searchUrl, {
                 headers: { 'User-Agent': 'TemporaryUserAgent' },
-                timeout: 10000 // Increased timeout slightly
+                timeout: 10000
             })
         );
 
         if (!response.data || !Array.isArray(response.data) || response.data.length === 0) {
-            console.log(`No ${languageId} subtitle candidates found or invalid API response.`);
-            return []; // Return empty array if none found
+            console.log(`No ${languageId} subtitles found or invalid API response.`);
+            return null;
         }
 
         // Filter for valid subtitle formats first
@@ -127,8 +127,8 @@ async function fetchSubtitleCandidates(languageId, baseSearchParams) {
         );
 
         if (validFormatSubs.length === 0) {
-             console.log(`No suitable subtitle formats found for ${languageId}.`);
-             return []; // Return empty array if no suitable format
+             console.log(`No suitable subtitle format found for ${languageId}.`);
+             return null;
         }
 
         // Sort the valid subtitles by download count (descending)
@@ -138,27 +138,36 @@ async function fetchSubtitleCandidates(languageId, baseSearchParams) {
             return downloadsB - downloadsA; // Sort descending
         });
 
-        // Map to the required format
-        const candidates = validFormatSubs.map(sub => ({
-            id: sub.IDSubtitleFile,
-            url: sub.SubDownloadLink, // Keep the original download link for fetching
-            lang: sub.SubLanguageID,
-            format: sub.SubFormat,
-            langName: sub.LanguageName,
-            releaseName: sub.MovieReleaseName || sub.MovieName || 'Unknown',
-            rating: parseFloat(sub.SubRating) || 0,
-            downloads: parseInt(sub.SubDownloadsCnt, 10) || 0
-        }));
+        // Map to the desired return format
+        const subtitleList = validFormatSubs.map(sub => {
+             const directUrl = sub.SubDownloadLink;
+             let subtitleUrl = directUrl;
+             // Note: No special handling for .gz here anymore, assuming fetchSubtitleContent handles it
+             if (directUrl.endsWith('.gz')) {
+                console.log(`Found gzipped subtitle for ${languageId} (ID: ${sub.IDSubtitleFile}). Fetch function will handle decompression.`);
+             }
 
-        console.log(`Found ${candidates.length} valid subtitle candidates for ${languageId}, sorted by downloads.`);
-        return candidates;
+            return {
+                id: sub.IDSubtitleFile,
+                url: subtitleUrl, // This URL will be used to *fetch* the content later
+                lang: sub.SubLanguageID,
+                format: sub.SubFormat,
+                langName: sub.LanguageName,
+                releaseName: sub.MovieReleaseName || sub.MovieName || 'Unknown',
+                rating: parseFloat(sub.SubRating) || 0,
+                downloads: parseInt(sub.SubDownloadsCnt, 10) || 0
+            };
+        });
+
+        console.log(`Found ${subtitleList.length} valid subtitles for ${languageId}, sorted by downloads.`);
+        return subtitleList; // Return the whole sorted list
 
     } catch (error) {
-        console.error(`Error fetching ${languageId} subtitle candidates:`, error.message);
+        console.error(`Error fetching ${languageId} subtitles:`, error.message);
         if (error.response && error.response.status === 429) {
             console.log(`Rate limit exceeded from OpenSubtitles API while fetching ${languageId}`);
         }
-        return []; // Return empty array on error
+        return null; // Return null on error
     }
 }
 // --- End Helper Function ---
@@ -501,13 +510,18 @@ process.on('SIGINT', () => {
             console.log('Strelingo Subtitle request:', { type, id, extra });
             console.log('Config:', config);
 
+            // Get selected languages from config, with defaults
             const mainLang = config?.mainLang || 'eng';
             const transLang = config?.transLang || 'tur';
+
             console.log(`Selected Languages: Main=${mainLang}, Translation=${transLang}`);
 
+            // Parse the IMDB ID
             let imdbId = extra?.imdbId || id;
             let season = extra?.season;
             let episode = extra?.episode;
+
+            // Handle combined series ID format (e.g., tt12345:1:2)
             if (imdbId.includes(':')) {
                 const parts = imdbId.split(':');
                 imdbId = parts[0];
@@ -522,108 +536,154 @@ process.on('SIGINT', () => {
                 return { subtitles: [] };
             }
 
-            const baseSearchParams = { imdbid: imdbId.replace('tt', '') };
+            // Prepare base search parameters (without language)
+            const baseSearchParams = {
+                imdbid: imdbId.replace('tt', '')
+            };
             if (type === 'series' && season && episode) {
                 baseSearchParams.season = season;
                 baseSearchParams.episode = episode;
             }
 
             try {
-                console.log("Fetching subtitle candidates for both languages...");
-                const [mainCandidates, transCandidates] = await Promise.all([
-                    fetchSubtitleCandidates(mainLang, baseSearchParams),
-                    fetchSubtitleCandidates(transLang, baseSearchParams)
-                ]);
-
-                if (mainCandidates.length === 0) {
-                    console.log("No subtitle candidates found for the main language.");
+                // 1. Fetch Main Subtitle Metadata (using the updated function)
+                console.log(`Fetching metadata list for main language: ${mainLang}`);
+                const mainSubInfoList = await fetchAndSelectSubtitle(mainLang, baseSearchParams);
+                if (!mainSubInfoList || mainSubInfoList.length === 0) {
+                    console.log(`No main language (${mainLang}) subtitles found.`);
                     return { subtitles: [], cacheMaxAge: 60 };
                 }
-
-                // Select Subtitles
-                const mainSubInfo = mainCandidates[0]; // Highest downloads
+                // Select the best main subtitle (first in the sorted list)
+                const mainSubInfo = mainSubInfoList[0];
                 console.log(`Selected Main Subtitle (${mainLang}): ID=${mainSubInfo.id}, Downloads=${mainSubInfo.downloads}`);
 
-                const selectedTransInfos = [];
-                const usedTransUrls = new Set();
-
-                // Select top 1 translation by downloads
-                if (transCandidates.length > 0) {
-                    selectedTransInfos.push(transCandidates[0]);
-                    usedTransUrls.add(transCandidates[0].url);
-                    console.log(`Selected Translation 1 (${transLang}): ID=${transCandidates[0].id}, Downloads=${transCandidates[0].downloads}`);
+                // 2. Fetch Translation Subtitle Metadata List
+                console.log(`Fetching metadata list for translation language: ${transLang}`);
+                const transSubInfoList = await fetchAndSelectSubtitle(transLang, baseSearchParams);
+                if (!transSubInfoList || transSubInfoList.length === 0) {
+                    console.warn(`No translation language (${transLang}) subtitles found. Attempting to return only main subtitle.`);
+                    // --- Fallback: Return only main subtitle ---
+                    const mainContent = await fetchSubtitleContent(mainSubInfo.url);
+                    if (!mainContent) {
+                        console.error("Failed to fetch main subtitle content for fallback.");
+                        return { subtitles: [], cacheMaxAge: 60 };
+                    }
+                    // Parse is needed if formatSrt doesn't take raw string
+                    const mainParsedFallback = parseSrt(mainContent);
+                    if(!mainParsedFallback) {
+                         console.error("Failed to parse main subtitle content for fallback.");
+                         return { subtitles: [], cacheMaxAge: 60 };
+                    }
+                    const formattedMain = formatSrt(mainParsedFallback); // Format back to ensure clean SRT
+                    if (!formattedMain) {
+                         console.error("Failed to format main subtitle content for fallback.");
+                         return { subtitles: [], cacheMaxAge: 60 };
+                    }
+                    const { url: mainUrl } = await put(`${imdbId}_${mainLang}_mainOnly.srt`, formattedMain, { access: 'public', addRandomSuffix: true });
+                    return {
+                        subtitles: [{ id: mainSubInfo.id, url: mainUrl, lang: mainLang }],
+                        cacheMaxAge: 3600
+                    };
+                    // --- End Fallback ---
                 }
 
-                // Select next 2 unique translations (no specific order needed for these)
-                for (let i = 1; i < transCandidates.length && selectedTransInfos.length < 3; i++) {
-                    if (!usedTransUrls.has(transCandidates[i].url)) {
-                        selectedTransInfos.push(transCandidates[i]);
-                        usedTransUrls.add(transCandidates[i].url);
-                        console.log(`Selected Translation ${selectedTransInfos.length} (${transLang}): ID=${transCandidates[i].id}, Downloads=${transCandidates[i].downloads}`);
+                // 3. Select up to 4 unique translation candidates
+                const selectedTransSubs = [];
+                const usedTransUrls = new Set();
+                for (const transSub of transSubInfoList) {
+                    if (selectedTransSubs.length >= 4) break; // Stop if we have 4
+                    if (!usedTransUrls.has(transSub.url)) {
+                        selectedTransSubs.push(transSub);
+                        usedTransUrls.add(transSub.url);
+                        console.log(`Selected translation candidate #${selectedTransSubs.length}: ID=${transSub.id}, Downloads=${transSub.downloads}, URL=${transSub.url}`);
                     }
                 }
 
-                if (selectedTransInfos.length === 0) {
-                     console.warn("No subtitle candidates found for the translation language. Returning only main subtitle.");
-                     // Proceed to fetch and return only the main subtitle
-                }
-
-                // Prepare list of subtitles to fetch
-                const subtitlesToFetch = [mainSubInfo, ...selectedTransInfos];
-                const fetchPromises = subtitlesToFetch.map(subInfo => fetchSubtitleContent(subInfo.url)); // Fetch raw content
-
-                console.log(`Fetching content for ${subtitlesToFetch.length} selected subtitles...`);
-                const fetchedContents = await Promise.all(fetchPromises);
-
-                // Filter out any failed fetches
-                const successfulFetches = subtitlesToFetch.map((subInfo, index) => ({ subInfo, content: fetchedContents[index] }))
-                                                      .filter(item => item.content !== null);
-
-                if (successfulFetches.length === 0) {
-                    console.error("Failed to fetch content for any selected subtitle.");
+                if (selectedTransSubs.length === 0) {
+                    console.error("Found translation metadata, but failed to select any unique candidates (this shouldn't happen if list was not empty).");
+                     // Consider fallback to main subtitle here as well?
                     return { subtitles: [], cacheMaxAge: 60 };
                 }
 
-                console.log(`Successfully fetched content for ${successfulFetches.length} subtitles. Uploading to blob storage...`);
+                // 4. Fetch and Parse Main Subtitle Content ONCE
+                console.log("Fetching main subtitle content...");
+                const mainSubContent = await fetchSubtitleContent(mainSubInfo.url);
+                if (!mainSubContent) {
+                    console.error("Failed to fetch main subtitle content. Cannot proceed.");
+                    return { subtitles: [], cacheMaxAge: 60 };
+                }
+                console.log("Parsing main subtitle content...");
+                const mainParsed = parseSrt(mainSubContent);
+                if (!mainParsed) {
+                    console.error("Failed to parse main subtitle content. Cannot proceed.");
+                    return { subtitles: [], cacheMaxAge: 60 };
+                }
 
-                // Upload successful fetches to Vercel Blob
-                const uploadPromises = successfulFetches.map(({ subInfo, content }, index) => {
-                    // Determine language suffix for filename and response
-                    let langSuffix = mainLang;
-                    let responseLang = mainLang;
-                    if (subInfo.lang === transLang) {
-                        // Find the original index in selectedTransInfos to determine the number
-                        const transIndex = selectedTransInfos.findIndex(t => t.id === subInfo.id);
-                        langSuffix = `${transLang}_${transIndex + 1}`;
-                        responseLang = transIndex > 0 ? `${transLang} (${transIndex + 1})` : transLang;
+                // 5. Process Each Selected Translation Subtitle
+                const finalSubtitles = [];
+                for (let i = 0; i < selectedTransSubs.length; i++) {
+                    const transSubInfo = selectedTransSubs[i];
+                    const version = i + 1;
+                    console.log(`Processing translation candidate v${version} (ID: ${transSubInfo.id})...`);
+
+                    // Fetch content
+                    const transSubContent = await fetchSubtitleContent(transSubInfo.url);
+                    if (!transSubContent) {
+                        console.warn(`Failed to fetch content for translation v${version}. Skipping.`);
+                        continue; // Skip to next candidate
                     }
-                    const filename = `${imdbId}_${langSuffix}.srt`;
 
-                    return put(filename, content, { access: 'public', addRandomSuffix: true })
-                        .then(({ url }) => ({ // Return object needed for final response
-                             id: subInfo.id,
-                             url: url,
-                             lang: responseLang
-                        }))
-                        .catch(err => {
-                            console.error(`Failed to upload ${filename}:`, err);
-                            return null; // Handle upload failure for this specific file
+                    // Parse content
+                    const transParsed = parseSrt(transSubContent);
+                    if (!transParsed) {
+                        console.warn(`Failed to parse content for translation v${version}. Skipping.`);
+                        continue; // Skip to next candidate
+                    }
+
+                    // Merge with main
+                    console.log(`Merging main with translation v${version}...`);
+                    const mergedParsed = mergeSubtitles([...mainParsed], transParsed); // Use copy of mainParsed
+                    if (!mergedParsed || mergedParsed.length === 0) {
+                        console.warn(`Merging failed or resulted in empty subtitles for v${version}. Skipping.`);
+                        continue; // Skip to next candidate
+                    }
+
+                    // Format to SRT
+                    console.log(`Formatting merged SRT for v${version}...`);
+                    const mergedSrtString = formatSrt(mergedParsed);
+                    if (!mergedSrtString) {
+                        console.warn(`Failed to format merged SRT for v${version}. Skipping.`);
+                        continue; // Skip to next candidate
+                    }
+
+                    // Upload to Blob
+                    console.log(`Uploading merged SRT for v${version} to Blob...`);
+                    try {
+                        const { url } = await put(
+                            `${imdbId}_${mainLang}_${transLang}_v${version}.srt`,
+                            mergedSrtString,
+                            { access: 'public', addRandomSuffix: true }
+                        );
+                        console.log(`Uploaded v${version} to: ${url}`);
+
+                        // Add to results
+                        finalSubtitles.push({
+                            id: `merged-${mainSubInfo.id}-${transSubInfo.id}`,
+                            url: url,
+                            lang: `${mainLang}+${transLang} (v${version} - ${transSubInfo.downloads}d)` // Added version and downloads
                         });
-                });
+                    } catch (uploadError) {
+                        console.error(`Failed to upload merged SRT for v${version}: ${uploadError.message}`);
+                        // Don't skip, just log the error, maybe other versions succeed
+                    }
+                }
 
-                const uploadResults = await Promise.all(uploadPromises);
+                // 6. Return results
+                if (finalSubtitles.length === 0) {
+                    console.warn("Processed translation candidates, but none resulted in a usable subtitle file. Returning empty.");
+                     // Consider fallback to main subtitle one last time?
+                }
 
-                // Filter out failed uploads
-                const finalSubtitles = uploadResults.filter(result => result !== null);
-
-                 if (finalSubtitles.length === 0) {
-                     console.error("All blob uploads failed.");
-                     return { subtitles: [], cacheMaxAge: 60 };
-                 }
-
-                console.log(`Successfully uploaded ${finalSubtitles.length} subtitles.`);
-
-                // Return the list of successfully uploaded subtitles
                 return {
                     subtitles: finalSubtitles,
                     cacheMaxAge: 6 * 3600, // Cache for 6 hours
