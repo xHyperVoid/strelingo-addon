@@ -6,7 +6,7 @@ const pako = require('pako');
 const { Buffer } = require('buffer');
 const chardet = require('chardet');
 const iconv = require('iconv-lite');
-const { put, list } = require('@vercel/blob');
+const { put } = require('@vercel/blob');
 
 // OpenSubtitles API base URL
 const OPENSUBS_API_URL = 'https://rest.opensubtitles.org';
@@ -546,52 +546,6 @@ process.on('SIGINT', () => {
             }
 
             try {
-                // --- Vercel Blob Cache Check --- 
-                const blobPrefix = `${imdbId}_${mainLang}_${transLang}_v`;
-                console.log(`Checking Vercel Blob for existing subtitles with prefix: ${blobPrefix}`);
-                let existingBlobs = [];
-                try {
-                    const listResult = await list({ prefix: blobPrefix, limit: 10 }); // Limit to 10, should be enough
-                    existingBlobs = listResult.blobs;
-                    console.log(`Found ${existingBlobs.length} potential matches in Blob.`);
-                } catch (listError) {
-                    console.warn(`Error listing blobs with prefix ${blobPrefix}: ${listError.message}. Proceeding without cache.`);
-                }
-
-                const cachedSubtitles = existingBlobs
-                    .map(blob => {
-                        // Extract version number from pathname e.g., tt123_eng_tur_v1-suffix.srt
-                        const match = blob.pathname.match(/_v(\d+)(?:-[^.]*)?\.srt$/);
-                        if (match && match[1]) {
-                            const version = parseInt(match[1], 10);
-                            // Construct a lang string similar to the generated one, maybe simplified
-                            // We don't have download counts here, so we'll make a simpler label
-                            const langLabel = `${mainLang}+${transLang} (v${version} - Cached)`; 
-                            return {
-                                id: `cached-${blob.pathname.replace(/\//g, '-')}`, // Create a unique-ish ID
-                                url: blob.url,
-                                lang: langLabel,
-                                version: version // Keep version for sorting
-                            };
-                        }
-                        return null; // Ignore blobs that don't match the pattern
-                    })
-                    .filter(sub => sub !== null)
-                    .sort((a, b) => a.version - b.version); // Sort by version number ASC
-
-                if (cachedSubtitles.length > 0) {
-                    console.log(`Returning ${cachedSubtitles.length} cached subtitle versions from Vercel Blob.`);
-                    // Remove the temporary version property before returning
-                    const finalCachedSubs = cachedSubtitles.map(({ version, ...rest }) => rest);
-                    return {
-                        subtitles: finalCachedSubs,
-                        cacheMaxAge: 6 * 3600, // Cache the fact that we served from cache
-                        staleRevalidate: 24 * 3600
-                    };
-                }
-                console.log("No suitable cached subtitles found in Blob. Proceeding to generate.");
-                // --- End Vercel Blob Cache Check ---
-
                 // 1. Fetch Main Subtitle Metadata (using the updated function)
                 console.log(`Fetching metadata list for main language: ${mainLang}`);
                 const mainSubInfoList = await fetchAndSelectSubtitle(mainLang, baseSearchParams);
