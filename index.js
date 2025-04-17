@@ -368,14 +368,21 @@ function mergeSubtitles(mainSubs, transSubs, mergeThresholdMs = 500) {
         // Process the best match found (if any)
         if (bestMatchIndex !== -1) {
             const bestTransSub = transSubs[bestMatchIndex];
+            // Flatten both main and translation text by replacing newlines with spaces
+            const flatMainText = mainSub.text.replace(/\r?\n|\r/g, ' ');
+            const flatTransText = bestTransSub.text.replace(/\r?\n|\r/g, ' ');
+
             mergedSubs.push({
                 ...mainSub, // Keep main timing and ID
-                // Combine text using standard newline (\n), making translation italic and yellow
-                text: `${mainSub.text}\n<font color="yellow"><i>${bestTransSub.text}</i></font>`
+                // Combine flattened texts with a newline, keeping translation italic and yellow
+                text: `${flatMainText}\n<font color="yellow"><i>${flatTransText}</i></font>`
             });
         } else {
-            // If no suitable translation match found, add the main subtitle as is
-            mergedSubs.push(mainSub);
+            // If no suitable translation match found, add the main subtitle as is (also flattened)
+            mergedSubs.push({
+                 ...mainSub,
+                 text: mainSub.text.replace(/\r?\n|\r/g, ' ')
+            });
         }
     }
     console.log(`Finished merging. Result has ${mergedSubs.length} entries.`);
