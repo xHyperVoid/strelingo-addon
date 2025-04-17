@@ -33,8 +33,8 @@ const builder = new addonBuilder({
     background: 'https://raw.githubusercontent.com/Serkali-sudo/strelingo-addon/refs/heads/main/assets/strelingo_back.jpg',
     catalogs: [],
     behaviorHints: {
-        configurable: false,
-        configurationRequired: false
+        configurable: true,
+        configurationRequired: true
     },
     config: [
         {
