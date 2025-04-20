@@ -7,6 +7,15 @@ This Stremio addon fetches subtitles for movies and series from OpenSubtitles an
 
 [![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/import/project?template=https://github.com/Serkali-sudo/strelingo-addon)
 
+## Demo Live Addon Url
+You can either add the Stremio addon by copying this and use add addon in stremio:
+ ```bash 
+ https://strelingo-addon.vercel.app/manifest.json
+ ```
+or visit the addon page here:  
+[https://strelingo-addon.vercel.app](https://strelingo-addon.vercel.app).
+
+
 ## Features
 
 *   Fetches subtitles from OpenSubtitles.
