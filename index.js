@@ -516,6 +516,12 @@ process.on('SIGINT', () => {
 
             console.log(`Selected Languages: Main=${mainLang}, Translation=${transLang}`);
 
+            // Add check for identical languages
+            if (mainLang === transLang) {
+                console.log(`Error: Main language (${mainLang}) and Translation language (${transLang}) cannot be the same. Aborting request.`);
+                return { subtitles: [], cacheMaxAge: 3600 }; // Return empty, cache for 1 hour
+            }
+
             // Parse the IMDB ID
             let imdbId = extra?.imdbId || id;
             let season = extra?.season;
