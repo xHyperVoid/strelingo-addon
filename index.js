@@ -567,29 +567,9 @@ process.on('SIGINT', () => {
                 console.log(`Fetching metadata list for translation language: ${transLang}`);
                 const transSubInfoList = await fetchAndSelectSubtitle(transLang, baseSearchParams);
                 if (!transSubInfoList || transSubInfoList.length === 0) {
-                    console.warn(`No translation language (${transLang}) subtitles found. Attempting to return only main subtitle.`);
-                    // --- Fallback: Return only main subtitle ---
-                    const mainContent = await fetchSubtitleContent(mainSubInfo.url);
-                    if (!mainContent) {
-                        console.error("Failed to fetch main subtitle content for fallback.");
-                        return { subtitles: [], cacheMaxAge: 60 };
-                    }
-                    // Parse is needed if formatSrt doesn't take raw string
-                    const mainParsedFallback = parseSrt(mainContent);
-                    if(!mainParsedFallback) {
-                         console.error("Failed to parse main subtitle content for fallback.");
-                         return { subtitles: [], cacheMaxAge: 60 };
-                    }
-                    const formattedMain = formatSrt(mainParsedFallback); // Format back to ensure clean SRT
-                    if (!formattedMain) {
-                         console.error("Failed to format main subtitle content for fallback.");
-                         return { subtitles: [], cacheMaxAge: 60 };
-                    }
-                    const { url: mainUrl } = await put(`${imdbId}_${mainLang}_mainOnly.srt`, formattedMain, { access: 'public', addRandomSuffix: true });
-                    return {
-                        subtitles: [{ id: mainSubInfo.id, url: mainUrl, lang: mainLang }],
-                        cacheMaxAge: 3600
-                    };
+                    console.warn(`No translation language (${transLang}) subtitles found. Returning empty results.`);
+                    // --- Fallback removed: No longer upload only main subtitle ---
+                    return { subtitles: [], cacheMaxAge: 60 }; // Return empty if no translation found
                     // --- End Fallback ---
                 }
 
