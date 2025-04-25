@@ -438,13 +438,13 @@ process.on('SIGINT', () => {
 
         // Initialize Supabase client
         const supabaseUrl = process.env.SUPABASE_URL;
-        const supabaseKey = process.env.SUPABASE_ANON_KEY;
+        const supabaseKey = process.env.SUPABASE_SERVICE_KEY;
         let supabase;
         if (supabaseUrl && supabaseKey) {
             supabase = createClient(supabaseUrl, supabaseKey);
-            console.log("Supabase client initialized.");
+            console.log("Supabase client initialized with Service Role Key.");
         } else {
-            console.warn("Supabase URL or Key not found in environment variables. Supabase fallback disabled.");
+            console.warn("Supabase URL or Service Role Key not found in environment variables. Supabase fallback disabled.");
         }
 
         // --- Parser Dependent Helpers (Define inside IIFE) ---
