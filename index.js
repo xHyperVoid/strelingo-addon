@@ -7,6 +7,7 @@ const { Buffer } = require('buffer');
 const chardet = require('chardet');
 const iconv = require('iconv-lite');
 const { put } = require('@vercel/blob');
+const { createClient } = require('@supabase/supabase-js');
 
 // OpenSubtitles API base URL
 const OPENSUBS_API_URL = 'https://rest.opensubtitles.org';
@@ -435,6 +436,17 @@ process.on('SIGINT', () => {
         const { default: SRTParser2 } = await import('srt-parser-2');
         console.log("Successfully imported srt-parser-2.");
 
+        // Initialize Supabase client
+        const supabaseUrl = process.env.SUPABASE_URL;
+        const supabaseKey = process.env.SUPABASE_ANON_KEY;
+        let supabase;
+        if (supabaseUrl && supabaseKey) {
+            supabase = createClient(supabaseUrl, supabaseKey);
+            console.log("Supabase client initialized.");
+        } else {
+            console.warn("Supabase URL or Key not found in environment variables. Supabase fallback disabled.");
+        }
+
         // --- Parser Dependent Helpers (Define inside IIFE) ---
 
         // Formats an array of subtitle objects back into SRT text
@@ -645,22 +657,66 @@ process.on('SIGINT', () => {
                     // Upload to Blob
                     console.log(`Uploading merged SRT for v${version} to Blob...`);
                     try {
+                        const blobFileName = `${imdbId}_${mainLang}_${transLang}_v${version}.srt`;
                         const { url } = await put(
-                            `${imdbId}_${mainLang}_${transLang}_v${version}.srt`,
+                            blobFileName,
                             mergedSrtString,
-                            { access: 'public', addRandomSuffix: true }
+                            { access: 'public', addRandomSuffix: true } // Keep random suffix for Vercel Blob
                         );
-                        console.log(`Uploaded v${version} to: ${url}`);
+                        console.log(`Uploaded v${version} to Vercel Blob: ${url}`);
 
                         // Add to results
                         finalSubtitles.push({
-                            id: `merged-${mainSubInfo.id}-${transSubInfo.id}`,
+                            id: `merged-${mainSubInfo.id}-${transSubInfo.id}-vercel`, // Suffix ID
                             url: url,
                             lang: `${mainLang}+${transLang}` // Use consistent lang code for grouping
                         });
                     } catch (uploadError) {
-                        console.error(`Failed to upload merged SRT for v${version}: ${uploadError.message}`);
-                        // Don't skip, just log the error, maybe other versions succeed
+                        console.error(`Failed to upload merged SRT for v${version} to Vercel Blob: ${uploadError.message}`);
+                        // Fallback to Supabase if initialized
+                        if (supabase) {
+                            console.log(`Attempting fallback upload to Supabase Storage for v${version}...`);
+                            try {
+                                // Use a consistent filename without random suffix for Supabase
+                                const supabaseFileName = `${imdbId}/${mainLang}_${transLang}_v${version}.srt`;
+                                const { data, error: supabaseError } = await supabase
+                                    .storage
+                                    .from('subtitles') // Replace 'subtitles' with your bucket name
+                                    .upload(supabaseFileName, mergedSrtString, {
+                                        cacheControl: '3600',
+                                        upsert: true, // Overwrite if exists
+                                        contentType: 'text/srt; charset=utf-8'
+                                    });
+
+                                if (supabaseError) {
+                                    throw supabaseError; // Throw error to be caught below
+                                }
+
+                                // Get the public URL (adjust if your bucket isn't public)
+                                const { data: publicUrlData } = supabase
+                                    .storage
+                                    .from('subtitles') // Replace 'subtitles' with your bucket name
+                                    .getPublicUrl(supabaseFileName);
+
+                                if (!publicUrlData || !publicUrlData.publicUrl) {
+                                     console.error(`Supabase upload successful for v${version}, but failed to get public URL.`);
+                                } else {
+                                     const supabaseUrl = publicUrlData.publicUrl;
+                                     console.log(`Uploaded v${version} to Supabase: ${supabaseUrl}`);
+                                     // Add Supabase result
+                                     finalSubtitles.push({
+                                         id: `merged-${mainSubInfo.id}-${transSubInfo.id}-supabase`, // Suffix ID
+                                         url: supabaseUrl,
+                                         lang: `${mainLang}+${transLang}`
+                                     });
+                                }
+                            } catch (supabaseUploadError) {
+                                console.error(`Fallback upload to Supabase Storage also failed for v${version}: ${supabaseUploadError.message}`);
+                                // Don't skip entirely, just log that both failed
+                            }
+                        } else {
+                            console.warn(`Supabase client not initialized, skipping fallback upload for v${version}.`);
+                        }
                     }
                 }
 
