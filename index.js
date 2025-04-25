@@ -522,6 +522,13 @@ process.on('SIGINT', () => {
             console.log('Strelingo Subtitle request:', { type, id, extra });
             console.log('Config:', config);
 
+            // --- Add Environment Variable for Skipping Vercel ---
+            const skipVercelBlob = process.env.SKIP_VERCEL_BLOB === 'true';
+            if (skipVercelBlob) {
+                console.log("SKIP_VERCEL_BLOB is true, Vercel Blob upload will be skipped.");
+            }
+            // ---------------------------------------------------
+
             // Get selected languages from config, with defaults
             const mainLang = config?.mainLang || 'eng';
             const transLang = config?.transLang || 'tur';
@@ -654,70 +661,82 @@ process.on('SIGINT', () => {
                         continue; // Skip to next candidate
                     }
 
-                    // Upload to Blob
-                    console.log(`Uploading merged SRT for v${version} to Blob...`);
-                    try {
-                        const blobFileName = `${imdbId}_${mainLang}_${transLang}_v${version}.srt`;
-                        const { url } = await put(
-                            blobFileName,
-                            mergedSrtString,
-                            { access: 'public', addRandomSuffix: true } // Keep random suffix for Vercel Blob
-                        );
-                        console.log(`Uploaded v${version} to Vercel Blob: ${url}`);
+                    // --- Conditional Upload Logic --- 
+                    let uploadedToVercel = false;
+                    let uploadUrl = null;
+                    let subtitleEntryId = `merged-${mainSubInfo.id}-${transSubInfo.id}`; // Base ID
 
-                        // Add to results
-                        finalSubtitles.push({
-                            id: `merged-${mainSubInfo.id}-${transSubInfo.id}-vercel`, // Suffix ID
-                            url: url,
-                            lang: `${mainLang}+${transLang}` // Use consistent lang code for grouping
-                        });
-                    } catch (uploadError) {
-                        console.error(`Failed to upload merged SRT for v${version} to Vercel Blob: ${uploadError.message}`);
-                        // Fallback to Supabase if initialized
-                        if (supabase) {
-                            console.log(`Attempting fallback upload to Supabase Storage for v${version}...`);
-                            try {
-                                // Use a consistent filename without random suffix for Supabase
-                                const supabaseFileName = `${imdbId}/${mainLang}_${transLang}_v${version}.srt`;
-                                const { data, error: supabaseError } = await supabase
-                                    .storage
-                                    .from('subtitles') // Replace 'subtitles' with your bucket name
-                                    .upload(supabaseFileName, mergedSrtString, {
-                                        cacheControl: '3600',
-                                        upsert: true, // Overwrite if exists
-                                        contentType: 'text/srt; charset=utf-8'
-                                    });
-
-                                if (supabaseError) {
-                                    throw supabaseError; // Throw error to be caught below
-                                }
-
-                                // Get the public URL (adjust if your bucket isn't public)
-                                const { data: publicUrlData } = supabase
-                                    .storage
-                                    .from('subtitles') // Replace 'subtitles' with your bucket name
-                                    .getPublicUrl(supabaseFileName);
-
-                                if (!publicUrlData || !publicUrlData.publicUrl) {
-                                     console.error(`Supabase upload successful for v${version}, but failed to get public URL.`);
-                                } else {
-                                     const supabaseUrl = publicUrlData.publicUrl;
-                                     console.log(`Uploaded v${version} to Supabase: ${supabaseUrl}`);
-                                     // Add Supabase result
-                                     finalSubtitles.push({
-                                         id: `merged-${mainSubInfo.id}-${transSubInfo.id}-supabase`, // Suffix ID
-                                         url: supabaseUrl,
-                                         lang: `${mainLang}+${transLang}`
-                                     });
-                                }
-                            } catch (supabaseUploadError) {
-                                console.error(`Fallback upload to Supabase Storage also failed for v${version}: ${supabaseUploadError.message}`);
-                                // Don't skip entirely, just log that both failed
-                            }
-                        } else {
-                            console.warn(`Supabase client not initialized, skipping fallback upload for v${version}.`);
+                    // Attempt Vercel Blob upload ONLY if not skipped
+                    if (!skipVercelBlob) {
+                        console.log(`Attempting Vercel Blob upload for v${version}...`);
+                        try {
+                            const blobFileName = `${imdbId}_${mainLang}_${transLang}_v${version}.srt`;
+                            const { url } = await put(
+                                blobFileName,
+                                mergedSrtString,
+                                { access: 'public', addRandomSuffix: true }
+                            );
+                            console.log(`Uploaded v${version} to Vercel Blob: ${url}`);
+                            uploadUrl = url;
+                            uploadedToVercel = true;
+                            subtitleEntryId += '-vercel'; 
+                        } catch (uploadError) {
+                            console.error(`Failed to upload merged SRT for v${version} to Vercel Blob: ${uploadError.message}`);
+                            // Do not throw, proceed to check Supabase fallback
                         }
                     }
+
+                    // Attempt Supabase upload if Vercel was skipped OR failed
+                    if (!uploadUrl && supabase) {
+                        console.log(`Attempting Supabase Storage upload for v${version}...`);
+                        try {
+                            const supabaseFileName = `${imdbId}/${mainLang}_${transLang}_v${version}.srt`;
+                            const { error: supabaseError } = await supabase
+                                .storage
+                                .from('subtitles') // Replace 'subtitles' with your bucket name
+                                .upload(supabaseFileName, mergedSrtString, {
+                                    cacheControl: '3600',
+                                    upsert: true,
+                                    contentType: 'text/srt; charset=utf-8'
+                                });
+
+                            if (supabaseError) throw supabaseError;
+
+                            const { data: publicUrlData } = supabase
+                                .storage
+                                .from('subtitles') // Replace 'subtitles' with your bucket name
+                                .getPublicUrl(supabaseFileName);
+
+                            if (!publicUrlData || !publicUrlData.publicUrl) {
+                                console.error(`Supabase upload successful for v${version}, but failed to get public URL.`);
+                            } else {
+                                uploadUrl = publicUrlData.publicUrl;
+                                console.log(`Uploaded v${version} to Supabase: ${uploadUrl}`);
+                                subtitleEntryId += '-supabase'; 
+                            }
+                        } catch (supabaseUploadError) {
+                            console.error(`Supabase Storage upload failed for v${version}: ${supabaseUploadError.message}`);
+                             // Log error, don't add to final results if both failed
+                        }
+                    } else if (!uploadUrl && !supabase) {
+                        // This case handles when Vercel was skipped/failed AND Supabase isn't configured
+                         console.warn(`Skipping upload for v${version}: Vercel Blob skipped or failed, and Supabase client is not initialized.`);
+                    } else if (uploadUrl && !uploadedToVercel && skipVercelBlob) {
+                         // This case handles when Vercel was skipped but Supabase succeeded (already logged)
+                         console.log(`Upload for v${version} completed via Supabase (Vercel was skipped).`);
+                    } // Else: Vercel succeeded, no need for Supabase.
+                    
+                    // Add to results if an upload was successful
+                    if (uploadUrl) {
+                         finalSubtitles.push({
+                             id: subtitleEntryId,
+                             url: uploadUrl,
+                             lang: `${mainLang}+${transLang}`
+                         });
+                    } else {
+                         console.warn(`Failed to upload v${version} to either Vercel Blob or Supabase Storage.`);
+                    }
+                    // --- End Conditional Upload Logic ---
                 }
 
                 // 6. Return results
