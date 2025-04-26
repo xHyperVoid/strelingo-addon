@@ -27,7 +27,6 @@ const builder = new addonBuilder({
     version: '0.1.1',
     name: 'Strelingo - Dual Language Subtitles',
     description: 'Provides dual subtitles (main + translation) from OpenSubtitles for language learning.',
-    contactEmail: 'serhatibin1@gmail.com',
     resources: ['subtitles'],
     types: ['movie', 'series'],
     idPrefixes: ['tt'],
