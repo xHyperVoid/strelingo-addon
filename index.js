@@ -670,7 +670,9 @@ process.on('SIGINT', () => {
                     if (!skipVercelBlob) {
                         console.log(`Attempting Vercel Blob upload for v${version}...`);
                         try {
-                            const blobFileName = `${imdbId}_${mainLang}_${transLang}_v${version}.srt`;
+                            // --- Modified Filename ---
+                            const blobFileName = `${type === 'series' && season && episode ? `${imdbId}_S${String(season).padStart(2, '0')}E${String(episode).padStart(2, '0')}` : imdbId}_${mainLang}_${transLang}_v${version}.srt`;
+                            // --- End Modified Filename ---
                             const { url } = await put(
                                 blobFileName,
                                 mergedSrtString,
@@ -679,7 +681,7 @@ process.on('SIGINT', () => {
                             console.log(`Uploaded v${version} to Vercel Blob: ${url}`);
                             uploadUrl = url;
                             uploadedToVercel = true;
-                            subtitleEntryId += '-vercel'; 
+                            subtitleEntryId += '-vercel';
                         } catch (uploadError) {
                             console.error(`Failed to upload merged SRT for v${version} to Vercel Blob: ${uploadError.message}`);
                             // Do not throw, proceed to check Supabase fallback
@@ -690,7 +692,9 @@ process.on('SIGINT', () => {
                     if (!uploadUrl && supabase) {
                         console.log(`Attempting Supabase Storage upload for v${version}...`);
                         try {
-                            const supabaseFileName = `${imdbId}/${mainLang}_${transLang}_v${version}.srt`;
+                            // --- Modified Filename ---
+                            const supabaseFileName = `${imdbId}/${type === 'series' && season && episode ? `S${String(season).padStart(2, '0')}E${String(episode).padStart(2, '0')}_` : ''}${mainLang}_${transLang}_v${version}.srt`;
+                            // --- End Modified Filename ---
                             const { error: supabaseError } = await supabase
                                 .storage
                                 .from('subtitles') // Replace 'subtitles' with your bucket name
