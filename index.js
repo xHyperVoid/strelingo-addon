@@ -26,7 +26,7 @@ const builder = new addonBuilder({
     id: 'com.serhat.strelingo',
     version: '0.1.1',
     name: 'Strelingo - Dual Language Subtitles',
-    description: 'Provides dual subtitles (main + translation) from OpenSubtitles for language learning.<br>Find the source code at: <a href="https://github.com/Serkali-sudo/strelingo-addon" target="_blank">https://github.com/Serkali-sudo/strelingo-addon</a>',
+    description: 'Provides dual subtitles (main + translation) from OpenSubtitles for language learning.<br><a href="https://github.com/Serkali-sudo/strelingo-addon" target="_blank">GitHub</a>',
     resources: ['subtitles'],
     types: ['movie', 'series'],
     idPrefixes: ['tt'],
