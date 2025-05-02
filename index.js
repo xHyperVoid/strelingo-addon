@@ -30,8 +30,8 @@ const builder = new addonBuilder({
     resources: ['subtitles'],
     types: ['movie', 'series'],
     idPrefixes: ['tt'],
-    logo: '/assets/strelingo_icon.jpg',
-    background: '/assets/strelingo_back.jpg',
+    logo: 'https://raw.githubusercontent.com/Serkali-sudo/strelingo-addon/refs/heads/main/assets/strelingo_icon.jpg',
+    background: 'https://raw.githubusercontent.com/Serkali-sudo/strelingo-addon/refs/heads/main/assets/strelingo_back.jpg',
     catalogs: [],
     behaviorHints: {
         configurable: true,
@@ -758,7 +758,7 @@ process.on('SIGINT', () => {
         });
 
         // --- Start Server (Inside IIFE) ---
-        serveHTTP(builder.getInterface(), { port: ADDON_PORT, static: './assets' });
+        serveHTTP(builder.getInterface(), { port: ADDON_PORT });
 
     } catch (err) {
         console.error("Failed to import srt-parser-2 or setup addon:", err);
