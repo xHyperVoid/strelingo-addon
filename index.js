@@ -692,12 +692,7 @@ process.on('SIGINT', () => {
                 // 2. Fetch Translation Subtitle Metadata List
                 console.log(`Fetching metadata list for translation language: ${transLang}`);
                 const transSubInfoList = await fetchAndSelectSubtitle(transLang, baseSearchParams);
-                if (!transSubInfoList || transSubInfoList.length === 0) {
-                    console.warn(`No translation language (${transLang}) subtitles found. Returning empty results.`);
-                    // --- Fallback removed: No longer upload only main subtitle ---
-                    return { subtitles: [], cacheMaxAge: 60 }; // Return empty if no translation found
-                    // --- End Fallback ---
-                }
+                // If transSubInfoList is null or empty, the new fallback logic (already in place further down) will be triggered.
 
                 // 3. Fetch and Parse Main Subtitle Content ONCE (moved earlier, might be needed for fallback)
                 console.log("Fetching main subtitle content...");
