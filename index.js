@@ -11,6 +11,9 @@ const { createClient } = require('@supabase/supabase-js');
 const cheerio = require('cheerio');
 const languages = require('@cospired/i18n-iso-languages');
 
+// Register English language data for the library to work correctly
+languages.registerLocale(require("@cospired/i18n-iso-languages/langs/en.json"));
+
 // OpenSubtitles API base URL
 const OPENSUBS_API_URL = 'https://rest.opensubtitles.org';
 
