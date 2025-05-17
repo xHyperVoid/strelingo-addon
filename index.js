@@ -8,14 +8,6 @@ const chardet = require('chardet');
 const iconv = require('iconv-lite');
 const { put } = require('@vercel/blob');
 const { createClient } = require('@supabase/supabase-js');
-const cheerio = require('cheerio');
-const languages = require('@cospired/i18n-iso-languages');
-
-// Register English language data for the library to work correctly
-languages.registerLocale(require("@cospired/i18n-iso-languages/langs/en.json"));
-
-console.log('Type of languages.alpha3ToAlpha2:', typeof languages.alpha3ToAlpha2);
-console.log('Available keys on languages object:', Object.keys(languages));
 
 // OpenSubtitles API base URL
 const OPENSUBS_API_URL = 'https://rest.opensubtitles.org';
@@ -54,7 +46,7 @@ const builder = new addonBuilder({
             key: 'mainLang',
             type: 'select',
             title: 'Main Language (Audio Language)',
-            options: ['abk','afr','alb','amh','ara','arg','arm','asm','ast','azb','aze','baq','bel','ben','bos','bre','bul','bur','cat','chi','cze','dan','dut','ell','eng','epo','est','ext','fin','fre','geo','ger','gla','gle','glg','heb','hin','hrv','hun','hat','ibo','ice','ina','ind','ita','jpn','kan','kaz','khm','kir','kor','kur','lav','lit','ltz','mac','mal','mar','may','mne','mni','mon','nav','nep','nor','oci','ori','per','pob','pol','pom','por','prs','pus','rum','rus','sat','scc','sin','slo','slv','sme','snd','som','spa','spl','spn','swa','swe','syr','tam','tat','tel','tet','tgl','tha','tok','tuk','tur','ukr','urd','uzb','vie','wel','wen','zhc','zhe','zht'],
+            options: ['abk','afr','alb','amh','ara','arg','arm','asm','ast','azb','aze','baq','bel','ben','bos','bre','bul','bur','cat','chi','cze','dan','dut','ell','eng','epo','est','ext','fin','fre','geo','ger','gla','gle','glg','heb','hin','hrv','hun','ibo','ice','ina','ind','ita','jpn','kan','kaz','khm','kir','kor','kur','lav','lit','ltz','mac','mal','mar','may','mne','mni','mon','nav','nep','nor','oci','ori','per','pob','pol','pom','por','prs','pus','rum','rus','sat','scc','sin','slo','slv','sme','snd','som','spa','spl','spn','swa','swe','syr','tam','tat','tel','tet','tgl','tha','tok','tuk','tur','ukr','urd','uzb','vie','wel','wen','zhc','zhe','zht'],
             required: true,
             default: 'eng'
         },
@@ -62,7 +54,7 @@ const builder = new addonBuilder({
             key: 'transLang',
             type: 'select',
             title: 'Translation Language (Your Language)',
-            options: ['abk','afr','alb','amh','ara','arg','arm','asm','ast','azb','aze','baq','bel','ben','bos','bre','bul','bur','cat','chi','cze','dan','dut','ell','eng','epo','est','ext','fin','fre','geo','ger','gla','gle','glg','heb','hin','hrv','hun','hat','ibo','ice','ina','ind','ita','jpn','kan','kaz','khm','kir','kor','kur','lav','lit','ltz','mac','mal','mar','may','mne','mni','mon','nav','nep','nor','oci','ori','per','pob','pol','pom','por','prs','pus','rum','rus','sat','scc','sin','slo','slv','sme','snd','som','spa','spl','spn','swa','swe','syr','tam','tat','tel','tet','tgl','tha','tok','tuk','tur','ukr','urd','uzb','vie','wel','wen','zhc','zhe','zht'],
+            options: ['abk','afr','alb','amh','ara','arg','arm','asm','ast','azb','aze','baq','bel','ben','bos','bre','bul','bur','cat','chi','cze','dan','dut','ell','eng','epo','est','ext','fin','fre','geo','ger','gla','gle','glg','heb','hin','hrv','hun','ibo','ice','ina','ind','ita','jpn','kan','kaz','khm','kir','kor','kur','lav','lit','ltz','mac','mal','mar','may','mne','mni','mon','nav','nep','nor','oci','ori','per','pob','pol','pom','por','prs','pus','rum','rus','sat','scc','sin','slo','slv','sme','snd','som','spa','spl','spn','swa','swe','syr','tam','tat','tel','tet','tgl','tha','tok','tuk','tur','ukr','urd','uzb','vie','wel','wen','zhc','zhe','zht'],
             required: true,
             default: 'tur'
         }
@@ -179,112 +171,11 @@ async function fetchAndSelectSubtitle(languageId, baseSearchParams) {
         console.error(`Error fetching ${languageId} subtitles:`, error.message);
         if (error.response && error.response.status === 429) {
             console.log(`Rate limit exceeded from OpenSubtitles API while fetching ${languageId}`);
-        } else if (error.code === 'ECONNABORTED') {
-            console.error(`Timeout while fetching ${languageId} subtitles from OpenSubtitles.`);
         }
         return null; // Return null on error
     }
 }
 // --- End Helper Function ---
-
-// --- Language Code Conversion Helper ---
-function getTwoLetterLangCode(threeLetterCode) {
-    if (!threeLetterCode) return null; // Return null if no code provided
-    if (threeLetterCode.length === 2) return threeLetterCode.toLowerCase(); // Already a two-letter code
-
-    const twoLetterCode = languages.alpha3TToAlpha2(threeLetterCode.toLowerCase());
-    if (twoLetterCode) {
-        return twoLetterCode;
-    }
-    // User had commented these out, will keep them commented for now.
-    // if (threeLetterCode.toLowerCase() === 'pob') return 'pt';
-    // if (threeLetterCode.toLowerCase() === 'zht') return 'zh-TW';
-    // if (threeLetterCode.toLowerCase() === 'zhe') return 'zh-CN';
-    // Add more specific mappings if needed
-
-    console.warn(`Could not convert 3-letter code "${threeLetterCode}" to 2-letter code using alpha3TToAlpha2. Returning null.`);
-    return null; // Fallback to null if no conversion found
-}
-// --- End Language Code Conversion Helper ---
-
-// --- Google Translate Helper ---
-const GOOGLE_TRANSLATE_BASE_URL = "https://www.google.com/async/translate";
-const GOOGLE_TRANSLATE_HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:136.0) Gecko/20100101 Firefox/136.0",
-    "Accept": "*/*",
-    "Accept-Language": "tr-TR,tr;q=0.8,en-US;q=0.5,en;q=0.3",
-    "Content-Type": "application/x-www-form-urlencoded;charset=utf-8",
-    "Sec-GPC": "1",
-    "Sec-Fetch-Dest": "empty",
-    "Sec-Fetch-Mode": "cors",
-    "Sec-Fetch-Site": "same-origin",
-    "Referer": "https://www.google.com/",
-};
-const JSON_PREFIX = ")]}'\n";
-
-async function translateTextGoogle(text, targetLang, sourceLang = "auto", timeout = 10000) {
-    if (!text) {
-        return null;
-    }
-
-    const twoLetterTargetLang = getTwoLetterLangCode(targetLang);
-    if (!twoLetterTargetLang) {
-        console.warn(`Invalid or unconvertible target language: ${targetLang}. Cannot translate.`);
-        return null;
-    }
-
-    let twoLetterSourceLang;
-    if (sourceLang.toLowerCase() === "auto") {
-        twoLetterSourceLang = "auto";
-    } else {
-        twoLetterSourceLang = getTwoLetterLangCode(sourceLang);
-        if (!twoLetterSourceLang) {
-            console.warn(`Unconvertible source language: ${sourceLang}. Defaulting to 'auto' for Google Translate.`);
-            twoLetterSourceLang = "auto"; // Default to auto-detect if source conversion fails
-        }
-    }
-
-    const requestId = Date.now().toString();
-    const dataString = `async=translate,sl:${twoLetterSourceLang},tl:${twoLetterTargetLang},st:${encodeURIComponent(text)},id:${requestId},qc:true,ac:true,_id:tw-async-translate,_pms:s,_fmt:pc`;
-
-    try {
-        const response = await axios.post(
-            GOOGLE_TRANSLATE_BASE_URL,
-            dataString,
-            {
-                headers: GOOGLE_TRANSLATE_HEADERS,
-                timeout: timeout
-            }
-        );
-
-        let rawResponseText = response.data;
-
-        if (rawResponseText.startsWith(JSON_PREFIX)) {
-            rawResponseText = rawResponseText.substring(JSON_PREFIX.length).trim();
-        } else {
-            rawResponseText = rawResponseText.trim();
-        }
-
-        const $ = cheerio.load(rawResponseText);
-        const targetTextSpan = $('#tw-answ-target-text');
-
-        if (targetTextSpan.length > 0) {
-            return targetTextSpan.text().trim();
-        } else {
-            console.warn(`Could not find main translation span #tw-answ-target-text for text: "${text}"`);
-            // console.log("Google Translate response body sample:", rawResponseText.substring(0, 500));
-            return null; // Or throw an error if preferred
-        }
-    } catch (error) {
-        console.error(`Google Translate request failed for text: "${text}" to ${targetLang}:`, error.message);
-        if (error.response) {
-            // console.error("Google Translate error response status:", error.response.status);
-            // console.error("Google Translate error response data:", error.response.data ? error.response.data.substring(0, 500) : "N/A");
-        }
-        return null; // Or re-throw
-    }
-}
-// --- End Google Translate Helper ---
 
 // --- SRT Parsing and Merging Helpers ---
 
@@ -698,237 +589,164 @@ process.on('SIGINT', () => {
                 // 2. Fetch Translation Subtitle Metadata List
                 console.log(`Fetching metadata list for translation language: ${transLang}`);
                 const transSubInfoList = await fetchAndSelectSubtitle(transLang, baseSearchParams);
-                // If transSubInfoList is null or empty, the new fallback logic (already in place further down) will be triggered.
+                if (!transSubInfoList || transSubInfoList.length === 0) {
+                    console.warn(`No translation language (${transLang}) subtitles found. Returning empty results.`);
+                    // --- Fallback removed: No longer upload only main subtitle ---
+                    return { subtitles: [], cacheMaxAge: 60 }; // Return empty if no translation found
+                    // --- End Fallback ---
+                }
 
-                // 3. Fetch and Parse Main Subtitle Content ONCE (moved earlier, might be needed for fallback)
+                // 3. Select up to 4 unique translation candidates
+                const selectedTransSubs = [];
+                const usedTransUrls = new Set();
+                for (const transSub of transSubInfoList) {
+                    if (selectedTransSubs.length >= 4) break; // Stop if we have 4
+                    if (!usedTransUrls.has(transSub.url)) {
+                        selectedTransSubs.push(transSub);
+                        usedTransUrls.add(transSub.url);
+                        console.log(`Selected translation candidate #${selectedTransSubs.length}: ID=${transSub.id}, Downloads=${transSub.downloads}, URL=${transSub.url}`);
+                    }
+                }
+
+                if (selectedTransSubs.length === 0) {
+                    console.error("Found translation metadata, but failed to select any unique candidates (this shouldn't happen if list was not empty).");
+                     // Consider fallback to main subtitle here as well?
+                    return { subtitles: [], cacheMaxAge: 60 };
+                }
+
+                // 4. Fetch and Parse Main Subtitle Content ONCE
                 console.log("Fetching main subtitle content...");
                 const mainSubContent = await fetchSubtitleContent(mainSubInfo.url);
                 if (!mainSubContent) {
-                    console.error("Failed to fetch main subtitle content. Cannot proceed with merging or fallback.");
+                    console.error("Failed to fetch main subtitle content. Cannot proceed.");
                     return { subtitles: [], cacheMaxAge: 60 };
                 }
                 console.log("Parsing main subtitle content...");
                 const mainParsed = parseSrt(mainSubContent);
                 if (!mainParsed) {
-                    console.error("Failed to parse main subtitle content. Cannot proceed with merging or fallback.");
+                    console.error("Failed to parse main subtitle content. Cannot proceed.");
                     return { subtitles: [], cacheMaxAge: 60 };
                 }
 
+                // 5. Process Each Selected Translation Subtitle
                 const finalSubtitles = [];
+                for (let i = 0; i < selectedTransSubs.length; i++) {
+                    const transSubInfo = selectedTransSubs[i];
+                    const version = i + 1;
+                    console.log(`Processing translation candidate v${version} (ID: ${transSubInfo.id})...`);
 
-                if (transSubInfoList && transSubInfoList.length > 0) {
-                    // --- Original logic for found translation subtitles ---
-                    console.log(`Found ${transSubInfoList.length} translation subtitle metadata entries. Proceeding with merging.`);
-                    const selectedTransSubs = [];
-                    const usedTransUrls = new Set();
-                    for (const transSub of transSubInfoList) {
-                        if (selectedTransSubs.length >= 4) break;
-                        if (!usedTransUrls.has(transSub.url)) {
-                            selectedTransSubs.push(transSub);
-                            usedTransUrls.add(transSub.url);
-                            console.log(`Selected translation candidate #${selectedTransSubs.length}: ID=${transSub.id}, Downloads=${transSub.downloads}, URL=${transSub.url}`);
+                    // Fetch content
+                    const transSubContent = await fetchSubtitleContent(transSubInfo.url);
+                    if (!transSubContent) {
+                        console.warn(`Failed to fetch content for translation v${version}. Skipping.`);
+                        continue; // Skip to next candidate
+                    }
+
+                    // Parse content
+                    const transParsed = parseSrt(transSubContent);
+                    if (!transParsed) {
+                        console.warn(`Failed to parse content for translation v${version}. Skipping.`);
+                        continue; // Skip to next candidate
+                    }
+
+                    // Merge with main
+                    console.log(`Merging main with translation v${version}...`);
+                    const mergedParsed = mergeSubtitles([...mainParsed], transParsed); // Use copy of mainParsed
+                    if (!mergedParsed || mergedParsed.length === 0) {
+                        console.warn(`Merging failed or resulted in empty subtitles for v${version}. Skipping.`);
+                        continue; // Skip to next candidate
+                    }
+
+                    // Format to SRT
+                    console.log(`Formatting merged SRT for v${version}...`);
+                    const mergedSrtString = formatSrt(mergedParsed);
+                    if (!mergedSrtString) {
+                        console.warn(`Failed to format merged SRT for v${version}. Skipping.`);
+                        continue; // Skip to next candidate
+                    }
+
+                    // --- Conditional Upload Logic --- 
+                    let uploadedToVercel = false;
+                    let uploadUrl = null;
+                    let subtitleEntryId = `merged-${mainSubInfo.id}-${transSubInfo.id}`; // Base ID
+
+                    // Attempt Vercel Blob upload ONLY if not skipped
+                    if (!skipVercelBlob) {
+                        console.log(`Attempting Vercel Blob upload for v${version}...`);
+                        try {
+                            const blobFileName = `${imdbId}_${mainLang}_${transLang}_v${version}.srt`;
+                            const { url } = await put(
+                                blobFileName,
+                                mergedSrtString,
+                                { access: 'public', addRandomSuffix: true }
+                            );
+                            console.log(`Uploaded v${version} to Vercel Blob: ${url}`);
+                            uploadUrl = url;
+                            uploadedToVercel = true;
+                            subtitleEntryId += '-vercel'; 
+                        } catch (uploadError) {
+                            console.error(`Failed to upload merged SRT for v${version} to Vercel Blob: ${uploadError.message}`);
+                            // Do not throw, proceed to check Supabase fallback
                         }
                     }
 
-                    if (selectedTransSubs.length === 0) {
-                        console.error("Found translation metadata, but failed to select any unique candidates (this shouldn't happen if list was not empty).");
-                         // This case should ideally not be hit if transSubInfoList was not empty, but as a safeguard:
-                        return { subtitles: [], cacheMaxAge: 60 };
-                    }
-
-                    // Process Each Selected Translation Subtitle for MERGING
-                    for (let i = 0; i < selectedTransSubs.length; i++) {
-                        const transSubInfo = selectedTransSubs[i];
-                        const version = i + 1; // For merged subtitles, version refers to the candidate trans sub
-                        console.log(`Processing MERGE with translation candidate v${version} (ID: ${transSubInfo.id})...`);
-
-                        // Fetch content for this specific translation candidate
-                        const transSubContent = await fetchSubtitleContent(transSubInfo.url);
-                        if (!transSubContent) {
-                            console.warn(`Failed to fetch content for translation v${version}. Skipping merge for this candidate.`);
-                            continue; 
-                        }
-
-                        // Parse content
-                        const transParsed = parseSrt(transSubContent);
-                        if (!transParsed) {
-                            console.warn(`Failed to parse content for translation v${version}. Skipping merge for this candidate.`);
-                            continue; 
-                        }
-
-                        // Merge with main
-                        console.log(`Merging main with translation v${version}...`);
-                        const mergedParsed = mergeSubtitles([...mainParsed], transParsed); // Use copy of mainParsed
-                        if (!mergedParsed || mergedParsed.length === 0) {
-                            console.warn(`Merging failed or resulted in empty subtitles for v${version}. Skipping merge for this candidate.`);
-                            continue; 
-                        }
-
-                        // Format to SRT
-                        console.log(`Formatting merged SRT for v${version}...`);
-                        const mergedSrtString = formatSrt(mergedParsed);
-                        if (!mergedSrtString) {
-                            console.warn(`Failed to format merged SRT for v${version}. Skipping merge for this candidate.`);
-                            continue; 
-                        }
-
-                        // --- Conditional Upload Logic for MERGED subtitles ---
-                        let uploadedToVercel = false;
-                        let uploadUrl = null;
-                        let subtitleEntryId = `merged-${mainSubInfo.id}-${transSubInfo.id}-v${version}`; 
-
-                        if (!skipVercelBlob) {
-                            console.log(`Attempting Vercel Blob upload for merged v${version}...`);
-                            try {
-                                const blobFileName = `${imdbId}_${mainLang}_${transLang}_merged_v${version}.srt`;
-                                const { url } = await put(
-                                    blobFileName,
-                                    mergedSrtString,
-                                    { access: 'public', addRandomSuffix: true }
-                                );
-                                console.log(`Uploaded merged v${version} to Vercel Blob: ${url}`);
-                                uploadUrl = url;
-                                uploadedToVercel = true;
-                                subtitleEntryId += '-vercel';
-                            } catch (uploadError) {
-                                console.error(`Failed to upload merged SRT v${version} to Vercel Blob: ${uploadError.message}`);
-                            }
-                        }
-
-                        if (!uploadUrl && supabase) {
-                            console.log(`Attempting Supabase Storage upload for merged v${version}...`);
-                            try {
-                                const supabaseFileName = `${imdbId}/${mainLang}_${transLang}_merged_v${version}.srt`;
-                                const { error: supabaseError } = await supabase
-                                    .storage
-                                    .from('subtitles') 
-                                    .upload(supabaseFileName, mergedSrtString, {
-                                        cacheControl: '3600',
-                                        upsert: true,
-                                        contentType: 'text/srt; charset=utf-8'
-                                    });
-
-                                if (supabaseError) throw supabaseError;
-
-                                const { data: publicUrlData } = supabase
-                                    .storage
-                                    .from('subtitles') 
-                                    .getPublicUrl(supabaseFileName);
-
-                                if (!publicUrlData || !publicUrlData.publicUrl) {
-                                    console.error(`Supabase upload for merged v${version} successful, but failed to get public URL.`);
-                                } else {
-                                    uploadUrl = publicUrlData.publicUrl;
-                                    console.log(`Uploaded merged v${version} to Supabase: ${uploadUrl}`);
-                                    subtitleEntryId += '-supabase';
-                                }
-                            } catch (supabaseUploadError) {
-                                console.error(`Supabase Storage upload failed for merged v${version}: ${supabaseUploadError.message}`);
-                            }
-                        } else if (!uploadUrl && !supabase) {
-                             console.warn(`Skipping upload for merged v${version}: Vercel Blob skipped or failed, and Supabase client is not initialized.`);
-                        }
-                        
-                        if (uploadUrl) {
-                             finalSubtitles.push({
-                                 id: subtitleEntryId,
-                                 url: uploadUrl,
-                                 lang: `${mainLang}+${transLang} (v${version})` // Indicate version from candidate list
-                             });
-                        } else {
-                             console.warn(`Failed to upload merged v${version} to either Vercel Blob or Supabase Storage.`);
-                        }
-                    }
-                } else {
-                    // --- Fallback: No translation subtitles found on OpenSubtitles, use Google Translate on main ---
-                    console.warn(`No translation language (${transLang}) subtitles found on OpenSubtitles. Attempting Google Translate fallback.`);
-
-                    if (mainParsed && mainParsed.length > 0) {
-                        const translatedSubsParsed = [];
-                        console.log(`Translating ${mainParsed.length} lines of main subtitle from ${mainLang} to ${transLang} using Google Translate...`);
-                        for (const mainSubEntry of mainParsed) {
-                            if (!mainSubEntry.text || mainSubEntry.text.trim() === '') {
-                                translatedSubsParsed.push({ ...mainSubEntry, text: mainSubEntry.text });
-                                continue;
-                            }
-                            const translatedText = await translateTextGoogle(mainSubEntry.text, transLang, mainLang);
-                            const flatMainText = mainSubEntry.text.replace(/\r?\n|\r/g, ' ');
-
-                            if (translatedText) {
-                                const flatTransText = translatedText.replace(/\r?\n|\r/g, ' ');
-                                translatedSubsParsed.push({
-                                    ...mainSubEntry,
-                                    text: `${flatMainText}\n<font color="yellow"><i>${flatTransText}</i></font>`
+                    // Attempt Supabase upload if Vercel was skipped OR failed
+                    if (!uploadUrl && supabase) {
+                        console.log(`Attempting Supabase Storage upload for v${version}...`);
+                        try {
+                            const supabaseFileName = `${imdbId}/${mainLang}_${transLang}_v${version}.srt`;
+                            const { error: supabaseError } = await supabase
+                                .storage
+                                .from('subtitles') // Replace 'subtitles' with your bucket name
+                                .upload(supabaseFileName, mergedSrtString, {
+                                    cacheControl: '3600',
+                                    upsert: true,
+                                    contentType: 'text/srt; charset=utf-8'
                                 });
+
+                            if (supabaseError) throw supabaseError;
+
+                            const { data: publicUrlData } = supabase
+                                .storage
+                                .from('subtitles') // Replace 'subtitles' with your bucket name
+                                .getPublicUrl(supabaseFileName);
+
+                            if (!publicUrlData || !publicUrlData.publicUrl) {
+                                console.error(`Supabase upload successful for v${version}, but failed to get public URL.`);
                             } else {
-                                console.warn(`Failed to translate line: "${mainSubEntry.text.substring(0,50)}...". Adding original line only.`);
-                                translatedSubsParsed.push({ ...mainSubEntry, text: flatMainText });
+                                uploadUrl = publicUrlData.publicUrl;
+                                console.log(`Uploaded v${version} to Supabase: ${uploadUrl}`);
+                                subtitleEntryId += '-supabase'; 
                             }
+                        } catch (supabaseUploadError) {
+                            console.error(`Supabase Storage upload failed for v${version}: ${supabaseUploadError.message}`);
+                             // Log error, don't add to final results if both failed
                         }
-
-                        console.log("Formatting Google Translated SRT...");
-                        const translatedSrtString = formatSrt(translatedSubsParsed);
-
-                        if (translatedSrtString) {
-                            let uploadedToVercel = false;
-                            let uploadUrl = null;
-                            let subtitleEntryId = `gtranslate-${mainSubInfo.id}-${mainLang}-to-${transLang}`;
-
-                            if (!skipVercelBlob) {
-                                console.log(`Attempting Vercel Blob upload for Google Translated SRT...`);
-                                try {
-                                    const blobFileName = `${imdbId}_${mainLang}_${transLang}_gtranslate.srt`;
-                                    const { url } = await put(blobFileName, translatedSrtString, { access: 'public', addRandomSuffix: true });
-                                    console.log(`Uploaded Google Translated SRT to Vercel Blob: ${url}`);
-                                    uploadUrl = url;
-                                    uploadedToVercel = true;
-                                    subtitleEntryId += '-vercel';
-                                } catch (uploadError) {
-                                    console.error(`Failed to upload Google Translated SRT to Vercel Blob: ${uploadError.message}`);
-                                }
-                            }
-
-                            if (!uploadUrl && supabase) {
-                                console.log(`Attempting Supabase Storage upload for Google Translated SRT...`);
-                                try {
-                                    const supabaseFileName = `${imdbId}/${mainLang}_${transLang}_gtranslate.srt`;
-                                    const { error: supabaseError } = await supabase.storage.from('subtitles').upload(supabaseFileName, translatedSrtString, { cacheControl: '3600', upsert: true, contentType: 'text/srt; charset=utf-8' });
-                                    if (supabaseError) throw supabaseError;
-                                    const { data: publicUrlData } = supabase.storage.from('subtitles').getPublicUrl(supabaseFileName);
-                                    if (!publicUrlData || !publicUrlData.publicUrl) {
-                                        console.error(`Supabase upload for Google Translated SRT successful, but failed to get public URL.`);
-                                    } else {
-                                        uploadUrl = publicUrlData.publicUrl;
-                                        console.log(`Uploaded Google Translated SRT to Supabase: ${uploadUrl}`);
-                                        subtitleEntryId += '-supabase';
-                                    }
-                                } catch (supabaseUploadError) {
-                                    console.error(`Supabase Storage upload failed for Google Translated SRT: ${supabaseUploadError.message}`);
-                                }
-                            } else if (!uploadUrl && !supabase) {
-                                 console.warn(`Skipping upload for Google Translated SRT: Vercel Blob skipped or failed, and Supabase client is not initialized.`);
-                            }
-                            
-                            if (uploadUrl) {
-                                finalSubtitles.push({
-                                    id: subtitleEntryId,
-                                    url: uploadUrl,
-                                    lang: `${mainLang}+${transLang} (Google Translate)`
-                                });
-                            } else {
-                                console.warn(`Failed to upload Google Translated SRT to either Vercel Blob or Supabase Storage.`);
-                            }
-                        } else {
-                            console.error("Failed to format Google Translated subtitles into SRT string.");
-                        }
+                    } else if (!uploadUrl && !supabase) {
+                        // This case handles when Vercel was skipped/failed AND Supabase isn't configured
+                         console.warn(`Skipping upload for v${version}: Vercel Blob skipped or failed, and Supabase client is not initialized.`);
+                    } else if (uploadUrl && !uploadedToVercel && skipVercelBlob) {
+                         // This case handles when Vercel was skipped but Supabase succeeded (already logged)
+                         console.log(`Upload for v${version} completed via Supabase (Vercel was skipped).`);
+                    } // Else: Vercel succeeded, no need for Supabase.
+                    
+                    // Add to results if an upload was successful
+                    if (uploadUrl) {
+                         finalSubtitles.push({
+                             id: subtitleEntryId,
+                             url: uploadUrl,
+                             lang: `${mainLang}+${transLang}`
+                         });
                     } else {
-                        console.warn("Main subtitle content was not available or empty, cannot perform Google Translate fallback.");
+                         console.warn(`Failed to upload v${version} to either Vercel Blob or Supabase Storage.`);
                     }
+                    // --- End Conditional Upload Logic ---
                 }
 
-                // Return results
+                // 6. Return results
                 if (finalSubtitles.length === 0) {
-                    console.warn("No subtitles could be prepared (neither merged nor Google Translated). Returning empty.");
+                    console.warn("Processed translation candidates, but none resulted in a usable subtitle file. Returning empty.");
+                     // Consider fallback to main subtitle one last time?
                 }
 
                 return {
@@ -939,10 +757,6 @@ process.on('SIGINT', () => {
 
             } catch (error) {
                 console.error('Error in subtitle handler:', error.message, error.stack);
-                // Check for specific error types if needed, e.g., from OpenSubtitles rate limiting
-                if (error.message && error.message.includes("Rate limit exceeded")) {
-                     return { subtitles: [], cacheMaxAge: 5 * 60 }; // Cache for 5 mins if rate limited
-                }
                 return { subtitles: [], cacheMaxAge: 60 }; // Cache failure briefly
             }
         });
