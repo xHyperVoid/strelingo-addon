@@ -14,7 +14,9 @@
     "chardet": "^2.1.0",
     "iconv-lite": "^0.6.3",
     "@vercel/blob": "^1.0.1",
-    "@supabase/supabase-js": "^2.49.4"
+    "@supabase/supabase-js": "^2.49.4",
+    "cheerio": "^1.0.0",
+    "@cospired/i18n-iso-languages": "^4.2.0"
   },
   "engines": {
     "node": ">=14"
