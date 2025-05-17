@@ -192,17 +192,17 @@ function getTwoLetterLangCode(threeLetterCode) {
     if (!threeLetterCode) return null; // Return null if no code provided
     if (threeLetterCode.length === 2) return threeLetterCode.toLowerCase(); // Already a two-letter code
 
-    const twoLetterCode = languages.alpha3ToAlpha2(threeLetterCode.toLowerCase());
+    const twoLetterCode = languages.alpha3TToAlpha2(threeLetterCode.toLowerCase());
     if (twoLetterCode) {
         return twoLetterCode;
     }
-    // Special cases or common fallbacks if library doesn't cover them directly
+    // User had commented these out, will keep them commented for now.
     // if (threeLetterCode.toLowerCase() === 'pob') return 'pt';
     // if (threeLetterCode.toLowerCase() === 'zht') return 'zh-TW';
     // if (threeLetterCode.toLowerCase() === 'zhe') return 'zh-CN';
     // Add more specific mappings if needed
 
-    console.warn(`Could not convert 3-letter code "${threeLetterCode}" to 2-letter code. Returning null.`);
+    console.warn(`Could not convert 3-letter code "${threeLetterCode}" to 2-letter code using alpha3TToAlpha2. Returning null.`);
     return null; // Fallback to null if no conversion found
 }
 // --- End Language Code Conversion Helper ---
