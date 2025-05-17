@@ -14,6 +14,9 @@ const languages = require('@cospired/i18n-iso-languages');
 // Register English language data for the library to work correctly
 languages.registerLocale(require("@cospired/i18n-iso-languages/langs/en.json"));
 
+console.log('Type of languages.alpha3ToAlpha2:', typeof languages.alpha3ToAlpha2);
+console.log('Available keys on languages object:', Object.keys(languages));
+
 // OpenSubtitles API base URL
 const OPENSUBS_API_URL = 'https://rest.opensubtitles.org';
 
