@@ -9,7 +9,7 @@ const iconv = require('iconv-lite');
 const { put } = require('@vercel/blob');
 const { createClient } = require('@supabase/supabase-js');
 const cheerio = require('cheerio');
-const languages = require('i18n-iso-languages');
+const languages = require('@cospired/i18n-iso-languages');
 
 // OpenSubtitles API base URL
 const OPENSUBS_API_URL = 'https://rest.opensubtitles.org';
