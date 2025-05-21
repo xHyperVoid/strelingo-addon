@@ -106,7 +106,7 @@ function withRateLimit(fn) {
 }
 
 // --- Helper Function to Fetch and Select Subtitle ---
-async function fetchAndSelectSubtitle(languageId, baseSearchParams) {
+async function fetchAndSelectSubtitle(languageId, baseSearchParams, shouldSortByDownloads = true) {
     const searchParams = { ...baseSearchParams, sublanguageid: languageId };
     const searchUrl = buildSearchUrl(searchParams);
     console.log(`Searching ${languageId} subtitles at: ${searchUrl}`);
@@ -125,7 +125,7 @@ async function fetchAndSelectSubtitle(languageId, baseSearchParams) {
         }
 
         // Filter for valid subtitle formats first
-        const validFormatSubs = response.data.filter(subtitle =>
+        let validFormatSubs = response.data.filter(subtitle =>
             subtitle.SubDownloadLink &&
             subtitle.SubFormat &&
             ['srt', 'vtt', 'sub', 'ass'].includes(subtitle.SubFormat.toLowerCase())
@@ -136,12 +136,17 @@ async function fetchAndSelectSubtitle(languageId, baseSearchParams) {
              return null;
         }
 
-        // Sort the valid subtitles by download count (descending)
-        validFormatSubs.sort((a, b) => {
-            const downloadsA = parseInt(a.SubDownloadsCnt, 10) || 0;
-            const downloadsB = parseInt(b.SubDownloadsCnt, 10) || 0;
-            return downloadsB - downloadsA; // Sort descending
-        });
+        // Conditionally sort the valid subtitles by download count (descending)
+        if (shouldSortByDownloads) {
+            console.log(`Sorting ${languageId} subtitles by download count.`);
+            validFormatSubs.sort((a, b) => {
+                const downloadsA = parseInt(a.SubDownloadsCnt, 10) || 0;
+                const downloadsB = parseInt(b.SubDownloadsCnt, 10) || 0;
+                return downloadsB - downloadsA; // Sort descending
+            });
+        } else {
+            console.log(`Skipping download count sort for ${languageId} subtitles.`);
+        }
 
         // Map to the desired return format
         const subtitleList = validFormatSubs.map(sub => {
@@ -577,7 +582,7 @@ process.on('SIGINT', () => {
             try {
                 // 1. Fetch Main Subtitle Metadata (using the updated function)
                 console.log(`Fetching metadata list for main language: ${mainLang}`);
-                const mainSubInfoList = await fetchAndSelectSubtitle(mainLang, baseSearchParams);
+                const mainSubInfoList = await fetchAndSelectSubtitle(mainLang, baseSearchParams, false);
                 if (!mainSubInfoList || mainSubInfoList.length === 0) {
                     console.log(`No main language (${mainLang}) subtitles found.`);
                     return { subtitles: [], cacheMaxAge: 60 };
