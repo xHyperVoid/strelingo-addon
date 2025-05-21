@@ -593,7 +593,7 @@ process.on('SIGINT', () => {
 
                 // 2. Fetch Translation Subtitle Metadata List
                 console.log(`Fetching metadata list for translation language: ${transLang}`);
-                const transSubInfoList = await fetchAndSelectSubtitle(transLang, baseSearchParams);
+                const transSubInfoList = await fetchAndSelectSubtitle(transLang, baseSearchParams, false);
                 if (!transSubInfoList || transSubInfoList.length === 0) {
                     console.warn(`No translation language (${transLang}) subtitles found. Returning empty results.`);
                     // --- Fallback removed: No longer upload only main subtitle ---
