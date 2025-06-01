@@ -674,7 +674,9 @@ process.on('SIGINT', () => {
                     if (!skipVercelBlob) {
                         console.log(`Attempting Vercel Blob upload for v${version}...`);
                         try {
-                            const blobFileName = `${imdbId}_${mainLang}_${transLang}_v${version}.srt`;
+                            const blobFileName = type === 'series' && season && episode 
+                                ? `${imdbId}_S${season}E${episode}_${mainLang}_${transLang}_v${version}.srt` 
+                                : `${imdbId}_${mainLang}_${transLang}_v${version}.srt`;
                             const { url } = await put(
                                 blobFileName,
                                 mergedSrtString,
@@ -694,7 +696,9 @@ process.on('SIGINT', () => {
                     if (!uploadUrl && supabase) {
                         console.log(`Attempting Supabase Storage upload for v${version}...`);
                         try {
-                            const supabaseFileName = `${imdbId}/${mainLang}_${transLang}_v${version}.srt`;
+                            const supabaseFileName = type === 'series' && season && episode
+                                ? `${imdbId}/S${season}E${episode}_${mainLang}_${transLang}_v${version}.srt`
+                                : `${imdbId}/${mainLang}_${transLang}_v${version}.srt`;
                             const { error: supabaseError } = await supabase
                                 .storage
                                 .from('subtitles') // Replace 'subtitles' with your bucket name
