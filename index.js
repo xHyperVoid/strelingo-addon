@@ -575,47 +575,25 @@ process.on('SIGINT', () => {
             }
 
             try {
-                // 1. Fetch Main Subtitle Metadata
-                let mainSubtitlesToProcess = [];
-                if (type === 'series') {
-                    console.log(`Fetching up to 4 unique metadata for main language: ${mainLang} (series)`);
-                    const allMainSubInfoList = await fetchAndSelectSubtitle(mainLang, baseSearchParams);
-                    if (!allMainSubInfoList || allMainSubInfoList.length === 0) {
-                        console.log(`No main language (${mainLang}) subtitles found for series.`);
-                        return { subtitles: [], cacheMaxAge: 60 };
-                    }
-                    const uniqueMainSubs = [];
-                    const usedMainUrls = new Set();
-                    for (const sub of allMainSubInfoList) {
-                        if (uniqueMainSubs.length >= 4) break;
-                        if (!usedMainUrls.has(sub.url)) {
-                            uniqueMainSubs.push(sub);
-                            usedMainUrls.add(sub.url);
-                        }
-                    }
-                    mainSubtitlesToProcess = uniqueMainSubs;
-                    if (mainSubtitlesToProcess.length === 0) {
-                        console.log(`No unique main language (${mainLang}) subtitles found after filtering for series.`);
-                        return { subtitles: [], cacheMaxAge: 60 };
-                    }
-                    console.log(`Selected ${mainSubtitlesToProcess.length} unique main subtitle(s) for series.`);
-                } else { // For movies
-                    console.log(`Fetching best metadata for main language: ${mainLang} (movie)`);
-                    const mainSubInfoList = await fetchAndSelectSubtitle(mainLang, baseSearchParams);
-                    if (!mainSubInfoList || mainSubInfoList.length === 0) {
-                        console.log(`No main language (${mainLang}) subtitles found for movie.`);
-                        return { subtitles: [], cacheMaxAge: 60 };
-                    }
-                    mainSubtitlesToProcess.push(mainSubInfoList[0]); // Use the best one, in an array for consistency
-                    console.log(`Selected Main Subtitle for movie (${mainLang}): ID=${mainSubtitlesToProcess[0].id}, Downloads=${mainSubtitlesToProcess[0].downloads}`);
+                // 1. Fetch Main Subtitle Metadata (using the updated function)
+                console.log(`Fetching metadata list for main language: ${mainLang}`);
+                const mainSubInfoList = await fetchAndSelectSubtitle(mainLang, baseSearchParams);
+                if (!mainSubInfoList || mainSubInfoList.length === 0) {
+                    console.log(`No main language (${mainLang}) subtitles found.`);
+                    return { subtitles: [], cacheMaxAge: 60 };
                 }
+                // Select the best main subtitle (first in the sorted list)
+                const mainSubInfo = mainSubInfoList[0];
+                console.log(`Selected Main Subtitle (${mainLang}): ID=${mainSubInfo.id}, Downloads=${mainSubInfo.downloads}`);
 
                 // 2. Fetch Translation Subtitle Metadata List
                 console.log(`Fetching metadata list for translation language: ${transLang}`);
                 const transSubInfoList = await fetchAndSelectSubtitle(transLang, baseSearchParams);
                 if (!transSubInfoList || transSubInfoList.length === 0) {
                     console.warn(`No translation language (${transLang}) subtitles found. Returning empty results.`);
-                    return { subtitles: [], cacheMaxAge: 60 };
+                    // --- Fallback removed: No longer upload only main subtitle ---
+                    return { subtitles: [], cacheMaxAge: 60 }; // Return empty if no translation found
+                    // --- End Fallback ---
                 }
 
                 // 3. Select up to 4 unique translation candidates
@@ -631,57 +609,44 @@ process.on('SIGINT', () => {
                 }
 
                 if (selectedTransSubs.length === 0) {
-                    console.error("Found translation metadata, but failed to select any unique candidates. Returning empty.");
+                    console.error("Found translation metadata, but failed to select any unique candidates (this shouldn't happen if list was not empty).");
+                     // Consider fallback to main subtitle here as well?
                     return { subtitles: [], cacheMaxAge: 60 };
                 }
 
-                // 4. Process Each Selected Translation Subtitle with a Corresponding Main Subtitle
+                // 4. Fetch and Parse Main Subtitle Content ONCE
+                console.log("Fetching main subtitle content...");
+                const mainSubContent = await fetchSubtitleContent(mainSubInfo.url);
+                if (!mainSubContent) {
+                    console.error("Failed to fetch main subtitle content. Cannot proceed.");
+                    return { subtitles: [], cacheMaxAge: 60 };
+                }
+                console.log("Parsing main subtitle content...");
+                const mainParsed = parseSrt(mainSubContent);
+                if (!mainParsed) {
+                    console.error("Failed to parse main subtitle content. Cannot proceed.");
+                    return { subtitles: [], cacheMaxAge: 60 };
+                }
+
+                // 5. Process Each Selected Translation Subtitle
                 const finalSubtitles = [];
-                const numPairsToProcess = type === 'series'
-                    ? Math.min(mainSubtitlesToProcess.length, selectedTransSubs.length)
-                    : selectedTransSubs.length; // For movies, mainSubtitlesToProcess has 1 item, loop controlled by selectedTransSubs
-
-                console.log(`Will attempt to process ${numPairsToProcess} subtitle pair(s).`);
-
-                for (let i = 0; i < numPairsToProcess; i++) {
+                for (let i = 0; i < selectedTransSubs.length; i++) {
                     const transSubInfo = selectedTransSubs[i];
-                    const mainSubInfoForThisPair = (type === 'series')
-                        ? mainSubtitlesToProcess[i] // Pair with a unique main sub if series
-                        : mainSubtitlesToProcess[0]; // Always use the single best main sub if movie
-
-                    if (!mainSubInfoForThisPair) {
-                        console.warn(`Undefined mainSubInfoForThisPair at index ${i} for type ${type}. Skipping pair.`);
-                        continue;
-                    }
-
                     const version = i + 1;
-                    console.log(`Processing pair v${version}: Main (ID: ${mainSubInfoForThisPair.id}, URL: ${mainSubInfoForThisPair.url}) with Trans (ID: ${transSubInfo.id}, URL: ${transSubInfo.url})...`);
+                    console.log(`Processing translation candidate v${version} (ID: ${transSubInfo.id})...`);
 
-                    // Fetch and Parse Main Subtitle Content FOR THIS PAIR
-                    console.log(`Fetching main subtitle content for v${version} (URL: ${mainSubInfoForThisPair.url})...`);
-                    const mainSubContent = await fetchSubtitleContent(mainSubInfoForThisPair.url);
-                    if (!mainSubContent) {
-                        console.warn(`Failed to fetch main subtitle content for v${version} (URL: ${mainSubInfoForThisPair.url}). Skipping.`);
-                        continue;
-                    }
-                    console.log(`Parsing main subtitle content for v${version}...`);
-                    const mainParsed = parseSrt(mainSubContent);
-                    if (!mainParsed) {
-                        console.warn(`Failed to parse main subtitle content for v${version}. Skipping.`);
-                        continue;
-                    }
-
-                    // Fetch and Parse Translation Subtitle Content
-                    console.log(`Fetching translation subtitle content for v${version} (URL: ${transSubInfo.url})...`);
+                    // Fetch content
                     const transSubContent = await fetchSubtitleContent(transSubInfo.url);
                     if (!transSubContent) {
-                        console.warn(`Failed to fetch content for translation v${version} (URL: ${transSubInfo.url}). Skipping.`);
-                        continue;
+                        console.warn(`Failed to fetch content for translation v${version}. Skipping.`);
+                        continue; // Skip to next candidate
                     }
+
+                    // Parse content
                     const transParsed = parseSrt(transSubContent);
                     if (!transParsed) {
                         console.warn(`Failed to parse content for translation v${version}. Skipping.`);
-                        continue;
+                        continue; // Skip to next candidate
                     }
 
                     // Merge with main
@@ -689,7 +654,7 @@ process.on('SIGINT', () => {
                     const mergedParsed = mergeSubtitles([...mainParsed], transParsed); // Use copy of mainParsed
                     if (!mergedParsed || mergedParsed.length === 0) {
                         console.warn(`Merging failed or resulted in empty subtitles for v${version}. Skipping.`);
-                        continue;
+                        continue; // Skip to next candidate
                     }
 
                     // Format to SRT
@@ -697,20 +662,20 @@ process.on('SIGINT', () => {
                     const mergedSrtString = formatSrt(mergedParsed);
                     if (!mergedSrtString) {
                         console.warn(`Failed to format merged SRT for v${version}. Skipping.`);
-                        continue;
+                        continue; // Skip to next candidate
                     }
 
-                    // --- Conditional Upload Logic ---
+                    // --- Conditional Upload Logic --- 
                     let uploadedToVercel = false;
                     let uploadUrl = null;
-                    let subtitleEntryId = `merged-${mainSubInfoForThisPair.id}-${transSubInfo.id}`; // Use specific main sub ID
+                    let subtitleEntryId = `merged-${mainSubInfo.id}-${transSubInfo.id}`; // Base ID
 
                     // Attempt Vercel Blob upload ONLY if not skipped
                     if (!skipVercelBlob) {
                         console.log(`Attempting Vercel Blob upload for v${version}...`);
                         try {
-                            const blobFileName = type === 'series' && season && episode
-                                ? `${imdbId}_S${season}E${episode}_${mainLang}_${transLang}_v${version}.srt`
+                            const blobFileName = type === 'series' && season && episode 
+                                ? `${imdbId}_S${season}E${episode}_${mainLang}_${transLang}_v${version}.srt` 
                                 : `${imdbId}_${mainLang}_${transLang}_v${version}.srt`;
                             const { url } = await put(
                                 blobFileName,
@@ -720,7 +685,7 @@ process.on('SIGINT', () => {
                             console.log(`Uploaded v${version} to Vercel Blob: ${url}`);
                             uploadUrl = url;
                             uploadedToVercel = true;
-                            subtitleEntryId += '-vercel';
+                            subtitleEntryId += '-vercel'; 
                         } catch (uploadError) {
                             console.error(`Failed to upload merged SRT for v${version} to Vercel Blob: ${uploadError.message}`);
                             // Do not throw, proceed to check Supabase fallback
@@ -755,7 +720,7 @@ process.on('SIGINT', () => {
                             } else {
                                 uploadUrl = publicUrlData.publicUrl;
                                 console.log(`Uploaded v${version} to Supabase: ${uploadUrl}`);
-                                subtitleEntryId += '-supabase';
+                                subtitleEntryId += '-supabase'; 
                             }
                         } catch (supabaseUploadError) {
                             console.error(`Supabase Storage upload failed for v${version}: ${supabaseUploadError.message}`);
@@ -768,13 +733,13 @@ process.on('SIGINT', () => {
                          // This case handles when Vercel was skipped but Supabase succeeded (already logged)
                          console.log(`Upload for v${version} completed via Supabase (Vercel was skipped).`);
                     } // Else: Vercel succeeded, no need for Supabase.
-
+                    
                     // Add to results if an upload was successful
                     if (uploadUrl) {
                          finalSubtitles.push({
                              id: subtitleEntryId,
                              url: uploadUrl,
-                             lang: `${mainLang}+${transLang}` // Language code reflects both
+                             lang: `${mainLang}+${transLang}`
                          });
                     } else {
                          console.warn(`Failed to upload v${version} to either Vercel Blob or Supabase Storage.`);
@@ -785,6 +750,7 @@ process.on('SIGINT', () => {
                 // 6. Return results
                 if (finalSubtitles.length === 0) {
                     console.warn("Processed translation candidates, but none resulted in a usable subtitle file. Returning empty.");
+                     // Consider fallback to main subtitle one last time?
                 }
 
                 return {
