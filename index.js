@@ -108,7 +108,8 @@ function withRateLimit(fn) {
 // --- Helper Function to Fetch and Select Subtitle ---
 async function fetchAndSelectSubtitle(languageId, baseSearchParams) {
     const searchParams = { ...baseSearchParams, sublanguageid: languageId };
-    const searchUrl = buildSearchUrl(searchParams);
+    const searchUrl = (languageId !== "jpn") ? buildSearchUrl(searchParams) 
+        : `https://buta-no-subs-stremio-addon.onrender.com/subtitles/${baseSearchParams.type}/tt${baseSearchParams.imdbid}${(baseSearchParams.season) ? ":" + baseSearchParams.season + ":" + baseSearchParams.episode : "" }.json`;
     console.log(`Searching ${languageId} subtitles at: ${searchUrl}`);
 
     try {
@@ -122,6 +123,19 @@ async function fetchAndSelectSubtitle(languageId, baseSearchParams) {
         if (!response.data || !Array.isArray(response.data) || response.data.length === 0) {
             console.log(`No ${languageId} subtitles found or invalid API response.`);
             return null;
+        }
+
+        if (languageId === "jpn") { //adapt Buta no Subs response for processing
+            let lgth = response.subtitles.length;
+            response.subtitles = response.subtitles.map((sub, idx) => {
+                sub.SubDownloadLink = sub.url;
+                sub.SubFormat = (['srt', 'vtt', 'sub', 'ass'].includes(sub.url.slice(-3))) ? sub.url.slice(-3) : "srt" ; //if we have an extension in the url, use it, otherwise it will almost certainly be an srt file
+                sub.SubDownloadsCnt = lgth - idx; //make each entry have a fake download count to preserve order
+                sub.IDSubtitleFile = sub.id;
+                sub.SubLanguageID = sub.lang;
+                sub.LanguageName = "Japanese";
+                return sub;
+            })
         }
 
         // Filter for valid subtitle formats first
@@ -567,7 +581,8 @@ process.on('SIGINT', () => {
 
             // Prepare base search parameters (without language)
             const baseSearchParams = {
-                imdbid: imdbId.replace('tt', '')
+                imdbid: imdbId.replace('tt', ''),
+                type //add the type to the object
             };
             if (type === 'series' && season && episode) {
                 baseSearchParams.season = season;
