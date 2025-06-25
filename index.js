@@ -125,8 +125,13 @@ async function fetchAndSelectSubtitle(languageId, baseSearchParams, type) {
                     headers: { 'User-Agent': 'TemporaryUserAgent' },
                     timeout: 10000
                 }).then((res) => { //adapt response to expected format
-                    let lgth = res.subtitles.length;
-                    res.subtitles = res.subtitles.map((sub, idx) => {
+                    if (!res.data || !Array.isArray(res.data.subtitles)) {
+                        // If response is not what we expect, treat it as no subtitles
+                        res.subtitles = [];
+                        return res;
+                    }
+                    let lgth = res.data.subtitles.length;
+                    res.subtitles = res.data.subtitles.map((sub, idx) => {
                         sub.SubDownloadLink = sub.url;
                         sub.SubFormat = (['srt', 'vtt', 'sub', 'ass'].includes(sub.url.slice(-3))) ? sub.url.slice(-3) : "srt" ; //if we have an extension in the url, use it, otherwise it will almost certainly be an srt file
                         sub.SubDownloadsCnt = lgth - idx; //make each entry have a fake download count to preserve order
