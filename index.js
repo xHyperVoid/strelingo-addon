@@ -119,8 +119,9 @@ async function fetchAndSelectSubtitle(languageId, baseSearchParams, type) {
             })
             if (languageId !== "jpn") return opensubsResponse
             else { //also request buta no subs and wait for both promises
-                console.log(`Searching ${languageId} subtitles at: https://buta-no-subs-stremio-addon.onrender.com`)
-                const butaNoSubsResponse = axios.get(`https://buta-no-subs-stremio-addon.onrender.com/subtitles/${type}/tt${baseSearchParams.imdbid}${(baseSearchParams.season) ? ":" + baseSearchParams.season + ":" + baseSearchParams.episode : "" }.json`, {
+                const butaNoSubsUrl = `https://buta-no-subs-stremio-addon.onrender.com/subtitles/${type}/tt${baseSearchParams.imdbid}${(baseSearchParams.season) ? ":" + baseSearchParams.season + ":" + baseSearchParams.episode : "" }.json`
+                console.log(`Searching ${languageId} subtitles at: ${butaNoSubsUrl}`)
+                const butaNoSubsResponse = axios.get(butaNoSubsUrl, {
                     headers: { 'User-Agent': 'TemporaryUserAgent' },
                     timeout: 10000
                 }).then((res) => { //adapt response to expected format
