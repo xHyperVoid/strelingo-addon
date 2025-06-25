@@ -108,7 +108,7 @@ function withRateLimit(fn) {
 // --- Helper Function to Fetch and Select Subtitle ---
 async function fetchAndSelectSubtitle(languageId, baseSearchParams) {
     const searchParams = { ...baseSearchParams, sublanguageid: languageId };
-    const searchUrl = buildSearchUrl(searchParams)
+    const searchUrl = buildSearchUrl(searchParams);
     console.log(`Searching ${languageId} subtitles at: ${searchUrl}`);
 
     try {
