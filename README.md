@@ -18,8 +18,8 @@ or visit the addon page here:
 [https://strelingo-addon.vercel.app](https://strelingo-addon.vercel.app).
 
 ## Providers
-* OpenSubtitles
-* [Buta no subs Stremio addon](https://github.com/Pigamer37/buta-no-subs-stremio-addon) for better japanese subtitles (Implemented by @Pigamer37)
+* OpenSubtitles.
+* [Buta no subs Stremio addon](https://github.com/Pigamer37/buta-no-subs-stremio-addon) for better japanese subtitles (Implemented by @Pigamer37).
 
 ## Features
 
@@ -84,7 +84,7 @@ The addon is now installed and configured with your chosen languages.
 
 *   **Backend:** Node.js
 *   **Stremio SDK:** `stremio-addon-sdk`
-*   **Subtitle Source:** OpenSubtitles API
+*   **Subtitle Source:** OpenSubtitles API, [Buta no subs Stremio addon](https://github.com/Pigamer37/buta-no-subs-stremio-addon)
 *   **HTTP Requests:** `axios`
 *   **Subtitle Parsing:** `srt-parser-2`
 *   **Gzip Decompression:** `pako`
