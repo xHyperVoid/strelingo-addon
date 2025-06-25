@@ -17,6 +17,9 @@ You can either add the Stremio addon by copying this and use add addon in stremi
 or visit the addon page here:  
 [https://strelingo-addon.vercel.app](https://strelingo-addon.vercel.app).
 
+## Providers
+* OpenSubtitles
+* [Buta no subs Stremio addon](https://github.com/Pigamer37/buta-no-subs-stremio-addon) for better japanese subtitles (Thanks to @Pigamer37)
 
 ## Features
 
