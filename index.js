@@ -106,7 +106,7 @@ function withRateLimit(fn) {
 }
 
 // --- Helper Function to Fetch and Select Subtitle ---
-async function fetchAndSelectSubtitle(languageId, baseSearchParams) {
+async function fetchAndSelectSubtitle(languageId, baseSearchParams, type) {
     const searchParams = { ...baseSearchParams, sublanguageid: languageId };
     const searchUrl = buildSearchUrl(searchParams);
     console.log(`Searching ${languageId} subtitles at: ${searchUrl}`);
@@ -120,7 +120,7 @@ async function fetchAndSelectSubtitle(languageId, baseSearchParams) {
             if (languageId !== "jpn") return opensubsResponse
             else { //also request buta no subs and wait for both promises
                 console.log(`Searching ${languageId} subtitles at: https://buta-no-subs-stremio-addon.onrender.com`)
-                const butaNoSubsResponse = axios.get(`https://buta-no-subs-stremio-addon.onrender.com/subtitles/${baseSearchParams.type}/tt${baseSearchParams.imdbid}${(baseSearchParams.season) ? ":" + baseSearchParams.season + ":" + baseSearchParams.episode : "" }.json`, {
+                const butaNoSubsResponse = axios.get(`https://buta-no-subs-stremio-addon.onrender.com/subtitles/${type}/tt${baseSearchParams.imdbid}${(baseSearchParams.season) ? ":" + baseSearchParams.season + ":" + baseSearchParams.episode : "" }.json`, {
                     headers: { 'User-Agent': 'TemporaryUserAgent' },
                     timeout: 10000
                 }).then((res) => { //adapt response to expected format
@@ -594,8 +594,7 @@ process.on('SIGINT', () => {
 
             // Prepare base search parameters (without language)
             const baseSearchParams = {
-                imdbid: imdbId.replace('tt', ''),
-                type //add the type to the object
+                imdbid: imdbId.replace('tt', '')
             };
             if (type === 'series' && season && episode) {
                 baseSearchParams.season = season;
@@ -605,7 +604,7 @@ process.on('SIGINT', () => {
             try {
                 // 1. Fetch Main Subtitle Metadata (using the updated function)
                 console.log(`Fetching metadata list for main language: ${mainLang}`);
-                const mainSubInfoList = await fetchAndSelectSubtitle(mainLang, baseSearchParams);
+                const mainSubInfoList = await fetchAndSelectSubtitle(mainLang, baseSearchParams, type);
                 if (!mainSubInfoList || mainSubInfoList.length === 0) {
                     console.log(`No main language (${mainLang}) subtitles found.`);
                     return { subtitles: [], cacheMaxAge: 60 };
@@ -616,7 +615,7 @@ process.on('SIGINT', () => {
 
                 // 2. Fetch Translation Subtitle Metadata List
                 console.log(`Fetching metadata list for translation language: ${transLang}`);
-                const transSubInfoList = await fetchAndSelectSubtitle(transLang, baseSearchParams);
+                const transSubInfoList = await fetchAndSelectSubtitle(transLang, baseSearchParams, type);
                 if (!transSubInfoList || transSubInfoList.length === 0) {
                     console.warn(`No translation language (${transLang}) subtitles found. Returning empty results.`);
                     // --- Fallback removed: No longer upload only main subtitle ---
