@@ -19,7 +19,7 @@ or visit the addon page here:
 
 ## Providers
 * OpenSubtitles
-* [Buta no subs Stremio addon](https://github.com/Pigamer37/buta-no-subs-stremio-addon) for better japanese subtitles (Thanks to @Pigamer37)
+* [Buta no subs Stremio addon](https://github.com/Pigamer37/buta-no-subs-stremio-addon) for better japanese subtitles (Implemented by @Pigamer37)
 
 ## Features
 
@@ -38,7 +38,9 @@ or visit the addon page here:
 
 *   [Node.js](https://nodejs.org/) (Version 14 or higher recommend)
 *   [npm](https://www.npmjs.com/) or [yarn](https://yarnpkg.com/)
-
+*   You will need either vercel blob key or supabase storage credentials. Because the addon creates a brand new srt everytime and it has to host somewhere. you can put those credentials in .env (You can techinally return the subtitle as base64 but i have found that it only works for stremio 4 version, it didnt worked in stremio 5 or mobile stremio)
+*   If you want vercel blob create a vercel blob in vercel and copy the token and put it in your env named BLOB_READ_WRITE_TOKEN
+*   If you want supabase storage instead of vercel you will need to copy SUPABASE_URL, SUPABASE_SERVICE_KEY, SUPABASE_ANON_KEY credentials from your supabase account.
 
 
 ## Local Setup
