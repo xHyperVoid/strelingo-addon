@@ -108,36 +108,49 @@ function withRateLimit(fn) {
 // --- Helper Function to Fetch and Select Subtitle ---
 async function fetchAndSelectSubtitle(languageId, baseSearchParams) {
     const searchParams = { ...baseSearchParams, sublanguageid: languageId };
-    const searchUrl = (languageId !== "jpn") ? buildSearchUrl(searchParams) 
-        : `https://buta-no-subs-stremio-addon.onrender.com/subtitles/${baseSearchParams.type}/tt${baseSearchParams.imdbid}${(baseSearchParams.season) ? ":" + baseSearchParams.season + ":" + baseSearchParams.episode : "" }.json`;
+    const searchUrl = buildSearchUrl(searchParams)
     console.log(`Searching ${languageId} subtitles at: ${searchUrl}`);
 
     try {
-        const response = await withRateLimit(() =>
-            axios.get(searchUrl, {
+        const response = await withRateLimit(() => {
+            const opensubsResponse = axios.get(searchUrl, {
                 headers: { 'User-Agent': 'TemporaryUserAgent' },
                 timeout: 10000
             })
-        );
+            if (languageId !== "jpn") return opensubsResponse
+            else { //also request buta no subs and wait for both promises
+                console.log(`Searching ${languageId} subtitles at: https://buta-no-subs-stremio-addon.onrender.com`)
+                const butaNoSubsResponse = axios.get(`https://buta-no-subs-stremio-addon.onrender.com/subtitles/${baseSearchParams.type}/tt${baseSearchParams.imdbid}${(baseSearchParams.season) ? ":" + baseSearchParams.season + ":" + baseSearchParams.episode : "" }.json`, {
+                    headers: { 'User-Agent': 'TemporaryUserAgent' },
+                    timeout: 10000
+                }).then((res) => { //adapt response to expected format
+                    let lgth = res.subtitles.length;
+                    res.subtitles = res.subtitles.map((sub, idx) => {
+                        sub.SubDownloadLink = sub.url;
+                        sub.SubFormat = (['srt', 'vtt', 'sub', 'ass'].includes(sub.url.slice(-3))) ? sub.url.slice(-3) : "srt" ; //if we have an extension in the url, use it, otherwise it will almost certainly be an srt file
+                        sub.SubDownloadsCnt = lgth - idx; //make each entry have a fake download count to preserve order
+                        sub.IDSubtitleFile = sub.id;
+                        sub.SubLanguageID = sub.lang;
+                        sub.LanguageName = "Japanese";
+                        return sub;
+                    })
+                    return res;
+                })
+                return Promise.allSettled([opensubsResponse, butaNoSubsResponse]).then((results) => {
+                    if (results[0].status === 'rejected' && results[1].status === 'rejected') throw results[0].reason
+                    let jpnResponse = { data: [] } //concatenate results
+                    if (results[0].status === 'fulfilled') jpnResponse.data = jpnResponse.data.concat(results[0].value.data);
+                    if (results[1].status === 'fulfilled') jpnResponse.data = jpnResponse.data.concat(results[1].value.subtitles);
+                    return jpnResponse;
+                });
+            }
+        });
 
         if (!response.data || !Array.isArray(response.data) || response.data.length === 0) {
             console.log(`No ${languageId} subtitles found or invalid API response.`);
             return null;
         }
-
-        if (languageId === "jpn") { //adapt Buta no Subs response for processing
-            let lgth = response.subtitles.length;
-            response.subtitles = response.subtitles.map((sub, idx) => {
-                sub.SubDownloadLink = sub.url;
-                sub.SubFormat = (['srt', 'vtt', 'sub', 'ass'].includes(sub.url.slice(-3))) ? sub.url.slice(-3) : "srt" ; //if we have an extension in the url, use it, otherwise it will almost certainly be an srt file
-                sub.SubDownloadsCnt = lgth - idx; //make each entry have a fake download count to preserve order
-                sub.IDSubtitleFile = sub.id;
-                sub.SubLanguageID = sub.lang;
-                sub.LanguageName = "Japanese";
-                return sub;
-            })
-        }
-
+        
         // Filter for valid subtitle formats first
         const validFormatSubs = response.data.filter(subtitle =>
             subtitle.SubDownloadLink &&
