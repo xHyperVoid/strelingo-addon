@@ -8,7 +8,8 @@ const chardet = require('chardet');
 const iconv = require('iconv-lite');
 const { put } = require('@vercel/blob');
 const { createClient } = require('@supabase/supabase-js');
-const { convert } = require('subtitle-converter');
+const { convert: convertWithSubtitleConverter } = require('subtitle-converter');
+const subsrt = require('subsrt');
 
 // OpenSubtitles API base URL
 const OPENSUBS_API_URL = 'https://rest.opensubtitles.org';
@@ -108,7 +109,7 @@ function withRateLimit(fn) {
 
 // --- Helper Function to Fetch and Select Subtitle ---
 async function fetchAndSelectSubtitle(languageId, baseSearchParams, type) {
-    const supportedFormats = ['dfxp', 'scc', 'srt', 'ttml', 'vtt', 'ssa', 'ass'];
+    const supportedFormats = ['dfxp', 'scc', 'srt', 'ttml', 'vtt', 'ssa', 'ass', 'sub', 'sbv', 'smi', 'lrc', 'json'];
     const searchParams = { ...baseSearchParams, sublanguageid: languageId };
     const searchUrl = buildSearchUrl(searchParams);
     console.log(`Searching ${languageId} subtitles at: ${searchUrl}`);
@@ -326,20 +327,42 @@ async function fetchSubtitleContent(url, sourceFormat = 'srt') {
         // 4. Convert to SRT if needed
         if (sourceFormat.toLowerCase() !== 'srt') {
             console.log(`Converting subtitle from ${sourceFormat} to srt.`);
+            let convertedSrt = null;
+
+            // Attempt 1: Use subsrt
             try {
-                const { subtitle, status } = convert(subtitleText, '.srt', { removeTextFormatting: true });
-                if (status.success) {
-                    console.log("Successfully converted to SRT.");
-                    subtitleText = subtitle;
-                } else {
-                    console.error(`Failed to convert subtitle from ${sourceFormat} to srt. Status:`, status);
-                    // Decide if you want to return null or the original text
-                    return null; 
+                console.log(`Attempting conversion with 'subsrt'...`);
+                const options = { format: 'srt' };
+                // subsrt might need fps for .sub, provide a default
+                if (sourceFormat.toLowerCase() === 'sub') {
+                    options.fps = 23.976; 
                 }
-            } catch (conversionError) {
-                console.error(`Error during ${sourceFormat} to srt conversion:`, conversionError.message);
-                return null;
+                const result = subsrt.convert(subtitleText, options);
+                if (result) {
+                    convertedSrt = result;
+                    console.log("Successfully converted to SRT using 'subsrt'.");
+                } else {
+                     throw new Error("'subsrt.convert' returned empty result.");
+                }
+            } catch (subsrtError) {
+                console.warn(`'subsrt' failed to convert from ${sourceFormat}: ${subsrtError.message}`);
+                // Fallback to subtitle-converter
+                console.log(`Falling back to 'subtitle-converter'...`);
+                try {
+                    const { subtitle, status } = convertWithSubtitleConverter(subtitleText, '.srt', { removeTextFormatting: true });
+                    if (status.success) {
+                        convertedSrt = subtitle;
+                        console.log("Successfully converted to SRT using 'subtitle-converter'.");
+                    } else {
+                        console.error(`Fallback 'subtitle-converter' also failed. Status:`, status);
+                        return null;
+                    }
+                } catch (fallbackError) {
+                    console.error(`Error during fallback conversion with 'subtitle-converter':`, fallbackError.message);
+                    return null;
+                }
             }
+            subtitleText = convertedSrt;
         }
 
         console.log(`Successfully fetched and processed subtitle: ${url}`);
