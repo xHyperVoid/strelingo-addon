@@ -14,7 +14,8 @@
     "chardet": "^2.1.0",
     "iconv-lite": "^0.6.3",
     "@vercel/blob": "^1.0.1",
-    "@supabase/supabase-js": "^2.49.4"
+    "@supabase/supabase-js": "^2.49.4",
+    "subtitle-converter": "^3.0.12"
   },
   "engines": {
     "node": ">=14"

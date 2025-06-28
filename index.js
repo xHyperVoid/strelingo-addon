@@ -8,6 +8,7 @@ const chardet = require('chardet');
 const iconv = require('iconv-lite');
 const { put } = require('@vercel/blob');
 const { createClient } = require('@supabase/supabase-js');
+const { convert } = require('subtitle-converter');
 
 // OpenSubtitles API base URL
 const OPENSUBS_API_URL = 'https://rest.opensubtitles.org';
@@ -107,6 +108,7 @@ function withRateLimit(fn) {
 
 // --- Helper Function to Fetch and Select Subtitle ---
 async function fetchAndSelectSubtitle(languageId, baseSearchParams, type) {
+    const supportedFormats = ['dfxp', 'scc', 'srt', 'ttml', 'vtt', 'ssa', 'ass'];
     const searchParams = { ...baseSearchParams, sublanguageid: languageId };
     const searchUrl = buildSearchUrl(searchParams);
     console.log(`Searching ${languageId} subtitles at: ${searchUrl}`);
@@ -133,7 +135,9 @@ async function fetchAndSelectSubtitle(languageId, baseSearchParams, type) {
                     let lgth = res.data.subtitles.length;
                     res.subtitles = res.data.subtitles.map((sub, idx) => {
                         sub.SubDownloadLink = sub.url;
-                        sub.SubFormat = (['srt', 'vtt', 'sub', 'ass'].includes(sub.url.slice(-3))) ? sub.url.slice(-3) : "srt" ; //if we have an extension in the url, use it, otherwise it will almost certainly be an srt file
+                        const lastDotIndex = sub.url.lastIndexOf('.');
+                        const extension = lastDotIndex > 0 ? sub.url.substring(lastDotIndex + 1).toLowerCase() : '';
+                        sub.SubFormat = supportedFormats.includes(extension) ? extension : 'srt';
                         sub.SubDownloadsCnt = lgth - idx; //make each entry have a fake download count to preserve order
                         sub.IDSubtitleFile = sub.id;
                         sub.SubLanguageID = sub.lang;
@@ -161,7 +165,7 @@ async function fetchAndSelectSubtitle(languageId, baseSearchParams, type) {
         const validFormatSubs = response.data.filter(subtitle =>
             subtitle.SubDownloadLink &&
             subtitle.SubFormat &&
-            ['srt', 'vtt', 'sub', 'ass'].includes(subtitle.SubFormat.toLowerCase())
+            supportedFormats.includes(subtitle.SubFormat.toLowerCase())
         );
 
         if (validFormatSubs.length === 0) {
@@ -213,7 +217,7 @@ async function fetchAndSelectSubtitle(languageId, baseSearchParams, type) {
 // --- SRT Parsing and Merging Helpers ---
 
 // Fetches subtitle content from URL, handles potential gzip and encoding
-async function fetchSubtitleContent(url) {
+async function fetchSubtitleContent(url, sourceFormat = 'srt') {
     console.log(`Fetching subtitle content from: ${url}`);
     try {
         const response = await axios.get(url, {
@@ -316,6 +320,25 @@ async function fetchSubtitleContent(url) {
             } catch (fallbackError) {
                 console.error(`Fallback decoding as latin1 also failed for ${url}: ${fallbackError.message}`);
                 return null; // Both attempts failed
+            }
+        }
+
+        // 4. Convert to SRT if needed
+        if (sourceFormat.toLowerCase() !== 'srt') {
+            console.log(`Converting subtitle from ${sourceFormat} to srt.`);
+            try {
+                const { subtitle, status } = convert(subtitleText, '.srt', { removeTextFormatting: true });
+                if (status.success) {
+                    console.log("Successfully converted to SRT.");
+                    subtitleText = subtitle;
+                } else {
+                    console.error(`Failed to convert subtitle from ${sourceFormat} to srt. Status:`, status);
+                    // Decide if you want to return null or the original text
+                    return null; 
+                }
+            } catch (conversionError) {
+                console.error(`Error during ${sourceFormat} to srt conversion:`, conversionError.message);
+                return null;
             }
         }
 
@@ -649,7 +672,7 @@ process.on('SIGINT', () => {
 
                 // 4. Fetch and Parse Main Subtitle Content ONCE
                 console.log("Fetching main subtitle content...");
-                const mainSubContent = await fetchSubtitleContent(mainSubInfo.url);
+                const mainSubContent = await fetchSubtitleContent(mainSubInfo.url, mainSubInfo.format);
                 if (!mainSubContent) {
                     console.error("Failed to fetch main subtitle content. Cannot proceed.");
                     return { subtitles: [], cacheMaxAge: 60 };
@@ -669,7 +692,7 @@ process.on('SIGINT', () => {
                     console.log(`Processing translation candidate v${version} (ID: ${transSubInfo.id})...`);
 
                     // Fetch content
-                    const transSubContent = await fetchSubtitleContent(transSubInfo.url);
+                    const transSubContent = await fetchSubtitleContent(transSubInfo.url, transSubInfo.format);
                     if (!transSubContent) {
                         console.warn(`Failed to fetch content for translation v${version}. Skipping.`);
                         continue; // Skip to next candidate
