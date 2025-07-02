@@ -654,28 +654,24 @@ process.on('SIGINT', () => {
             }
 
             try {
-                // 1. Fetch Main Subtitle Metadata (using the updated function)
+                // 1. Fetch Subtitle Metadata Lists
                 console.log(`Fetching metadata list for main language: ${mainLang}`);
                 const mainSubInfoList = await fetchAndSelectSubtitle(mainLang, baseSearchParams, type);
+                
+                console.log(`Fetching metadata list for translation language: ${transLang}`);
+                const transSubInfoList = await fetchAndSelectSubtitle(transLang, baseSearchParams, type);
+
+                // Check if we have subtitles for both languages
                 if (!mainSubInfoList || mainSubInfoList.length === 0) {
                     console.log(`No main language (${mainLang}) subtitles found.`);
                     return { subtitles: [], cacheMaxAge: 60 };
                 }
-                // Select the best main subtitle (first in the sorted list)
-                const mainSubInfo = mainSubInfoList[0];
-                console.log(`Selected Main Subtitle (${mainLang}): ID=${mainSubInfo.id}, Downloads=${mainSubInfo.downloads}`);
-
-                // 2. Fetch Translation Subtitle Metadata List
-                console.log(`Fetching metadata list for translation language: ${transLang}`);
-                const transSubInfoList = await fetchAndSelectSubtitle(transLang, baseSearchParams, type);
                 if (!transSubInfoList || transSubInfoList.length === 0) {
                     console.warn(`No translation language (${transLang}) subtitles found. Returning empty results.`);
-                    // --- Fallback removed: No longer upload only main subtitle ---
-                    return { subtitles: [], cacheMaxAge: 60 }; // Return empty if no translation found
-                    // --- End Fallback ---
+                    return { subtitles: [], cacheMaxAge: 60 };
                 }
-
-                // 3. Select up to 4 unique translation candidates
+                
+                // 2. Select up to 4 unique translation candidates
                 const selectedTransSubs = [];
                 const usedTransUrls = new Set();
                 for (const transSub of transSubInfoList) {
@@ -689,25 +685,41 @@ process.on('SIGINT', () => {
 
                 if (selectedTransSubs.length === 0) {
                     console.error("Found translation metadata, but failed to select any unique candidates (this shouldn't happen if list was not empty).");
-                     // Consider fallback to main subtitle here as well?
                     return { subtitles: [], cacheMaxAge: 60 };
                 }
 
-                // 4. Fetch and Parse Main Subtitle Content ONCE
-                console.log("Fetching main subtitle content...");
-                const mainSubContent = await fetchSubtitleContent(mainSubInfo.url, mainSubInfo.format);
-                if (!mainSubContent) {
-                    console.error("Failed to fetch main subtitle content. Cannot proceed.");
-                    return { subtitles: [], cacheMaxAge: 60 };
+                // 3. Find a valid main subtitle by trying each one from the sorted list
+                let mainParsed = null;
+                let selectedMainSubInfo = null;
+                for (const mainSubInfo of mainSubInfoList) {
+                    console.log(`Attempting to process main subtitle: ID=${mainSubInfo.id}, Downloads=${mainSubInfo.downloads}`);
+                    
+                    const mainSubContent = await fetchSubtitleContent(mainSubInfo.url, mainSubInfo.format);
+                    if (!mainSubContent) {
+                        console.warn(`Failed to fetch content for main sub ID ${mainSubInfo.id}. Trying next candidate.`);
+                        continue;
+                    }
+
+                    console.log("Parsing main subtitle content...");
+                    const parsed = parseSrt(mainSubContent);
+                    if (!parsed) {
+                        console.warn(`Failed to parse content for main sub ID ${mainSubInfo.id}. Trying next candidate.`);
+                        continue;
+                    }
+
+                    // Success!
+                    mainParsed = parsed;
+                    selectedMainSubInfo = mainSubInfo;
+                    console.log(`Successfully processed main subtitle (ID: ${selectedMainSubInfo.id}). Proceeding with translations.`);
+                    break; // Exit loop once a working main sub is found
                 }
-                console.log("Parsing main subtitle content...");
-                const mainParsed = parseSrt(mainSubContent);
+
                 if (!mainParsed) {
-                    console.error("Failed to parse main subtitle content. Cannot proceed.");
+                    console.error("Failed to fetch and parse any of the available main subtitles. Cannot proceed.");
                     return { subtitles: [], cacheMaxAge: 60 };
                 }
 
-                // 5. Process Each Selected Translation Subtitle
+                // 4. Process Each Selected Translation Subtitle with the valid main subtitle
                 const finalSubtitles = [];
                 for (let i = 0; i < selectedTransSubs.length; i++) {
                     const transSubInfo = selectedTransSubs[i];
@@ -747,7 +759,7 @@ process.on('SIGINT', () => {
                     // --- Conditional Upload Logic --- 
                     let uploadedToVercel = false;
                     let uploadUrl = null;
-                    let subtitleEntryId = `merged-${mainSubInfo.id}-${transSubInfo.id}`; // Base ID
+                    let subtitleEntryId = `merged-${selectedMainSubInfo.id}-${transSubInfo.id}`; // Use the ID of the successfully fetched main sub
 
                     // Attempt Vercel Blob upload ONLY if not skipped
                     if (!skipVercelBlob) {
@@ -826,10 +838,9 @@ process.on('SIGINT', () => {
                     // --- End Conditional Upload Logic ---
                 }
 
-                // 6. Return results
+                // 5. Return results
                 if (finalSubtitles.length === 0) {
                     console.warn("Processed translation candidates, but none resulted in a usable subtitle file. Returning empty.");
-                     // Consider fallback to main subtitle one last time?
                 }
 
                 return {
