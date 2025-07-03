@@ -598,7 +598,7 @@ process.on('SIGINT', () => {
                 console.error('Error parsing SRT:', error.message);
                 return null;
             }
-        }
+        } 
 
         // --- Define Addon Handler (Inside IIFE) ---
         builder.defineSubtitlesHandler(async ({ type, id, extra, config }) => {
