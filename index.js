@@ -570,24 +570,12 @@ process.on('SIGINT', () => {
                 // Pre-process: normalize line endings
                 srtText = srtText.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
 
-                let subtitles = parser.fromSrt(srtText);
+                const subtitles = parser.fromSrt(srtText);
 
                 if (!Array.isArray(subtitles)) {
                      console.error("Parsing did not return an array.");
                      return null;
                 }
-
-                // Adblocker: Filter out subtitles containing ad keywords
-                const adKeywords = ["OpenSubtitles.org", "www.osdb.link"];
-                const originalCount = subtitles.length;
-                subtitles = subtitles.filter(sub => 
-                    !adKeywords.some(keyword => sub.text.includes(keyword))
-                );
-                
-                if (originalCount > subtitles.length) {
-                    console.log(`Adblocker: Removed ${originalCount - subtitles.length} subtitle line(s) containing ads.`);
-                }
-
                  if (subtitles.length === 0 && srtText.trim().length > 0) {
                      console.warn("Parsing resulted in an empty array despite non-empty input.");
                      return null; // Treat as parse failure if input wasn't just whitespace
