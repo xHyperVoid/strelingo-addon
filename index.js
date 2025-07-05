@@ -578,7 +578,7 @@ process.on('SIGINT', () => {
                 }
 
                 // Adblocker: Filter out subtitles containing ad keywords
-                const adKeywords = ["OpenSubtitles.org", "osdb.link"];
+                const adKeywords = ["OpenSubtitles.org", "OpenSubtitles.com", "osdb.link"];
                 const originalCount = subtitles.length;
                 subtitles = subtitles.filter(sub => 
                     !adKeywords.some(keyword => sub.text.includes(keyword))
