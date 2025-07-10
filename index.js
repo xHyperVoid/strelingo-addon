@@ -84,8 +84,7 @@ const builder = new addonBuilder({
             type: 'select',
             title: 'Translation Language (Your Language)',
             options: languageOptions,
-            required: true,
-            default: 'Turkish [tur]'
+            required: true
         }
     ]
 });
