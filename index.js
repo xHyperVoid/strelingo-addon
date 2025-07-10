@@ -11,6 +11,32 @@ const { createClient } = require('@supabase/supabase-js');
 const { convert: convertWithSubtitleConverter } = require('subtitle-converter');
 const subsrt = require('subsrt');
 
+const languageMap = {
+    'abk': 'Abkhazian', 'afr': 'Afrikaans', 'alb': 'Albanian', 'amh': 'Amharic', 'ara': 'Arabic',
+    'arg': 'Aragonese', 'arm': 'Armenian', 'asm': 'Assamese', 'ast': 'Asturian', 'azb': 'South Azerbaijani',
+    'aze': 'Azerbaijani', 'baq': 'Basque', 'bel': 'Belarusian', 'ben': 'Bengali', 'bos': 'Bosnian',
+    'bre': 'Breton', 'bul': 'Bulgarian', 'bur': 'Burmese', 'cat': 'Catalan', 'chi': 'Chinese (simplified)',
+    'cze': 'Czech', 'dan': 'Danish', 'dut': 'Dutch', 'ell': 'Greek', 'eng': 'English', 'epo': 'Esperanto',
+    'est': 'Estonian', 'ext': 'Extremaduran', 'fin': 'Finnish', 'fre': 'French', 'geo': 'Georgian',
+    'ger': 'German', 'gla': 'Gaelic', 'gle': 'Irish', 'glg': 'Galician', 'heb': 'Hebrew', 'hin': 'Hindi',
+    'hrv': 'Croatian', 'hun': 'Hungarian', 'ibo': 'Igbo', 'ice': 'Icelandic', 'ina': 'Interlingua',
+    'ind': 'Indonesian', 'ita': 'Italian', 'jpn': 'Japanese', 'kan': 'Kannada', 'kaz': 'Kazakh',
+    'khm': 'Khmer', 'kir': 'Kyrgyz', 'kor': 'Korean', 'kur': 'Kurdish', 'lav': 'Latvian',
+    'lit': 'Lithuanian', 'ltz': 'Luxembourgish', 'mac': 'Macedonian', 'mal': 'Malayalam', 'mar': 'Marathi',
+    'may': 'Malay', 'mne': 'Montenegrin', 'mni': 'Manipuri', 'mon': 'Mongolian', 'nav': 'Navajo',
+    'nep': 'Nepali', 'nor': 'Norwegian', 'oci': 'Occitan', 'ori': 'Odia', 'per': 'Persian',
+    'pob': 'Portuguese (BR)', 'pol': 'Polish', 'pom': 'Portuguese (MZ)', 'por': 'Portuguese',
+    'prs': 'Dari', 'pus': 'Pushto', 'rum': 'Romanian', 'rus': 'Russian', 'sat': 'Santali', 'scc': 'Serbian',
+    'sin': 'Sinhalese', 'slo': 'Slovak', 'slv': 'Slovenian', 'sme': 'Northern Sami', 'snd': 'Sindhi',
+    'som': 'Somali', 'spa': 'Spanish', 'spl': 'Spanish (LA)', 'spn': 'Spanish (EU)', 'swa': 'Swahili',
+    'swe': 'Swedish', 'syr': 'Syriac', 'tam': 'Tamil', 'tat': 'Tatar', 'tel': 'Telugu', 'tet': 'Tetum',
+    'tgl': 'Tagalog', 'tha': 'Thai', 'tok': 'Toki Pona', 'tur': 'Turkish', 'tuk': 'Turkmen', 'ukr': 'Ukrainian',
+    'urd': 'Urdu', 'uzb': 'Uzbek', 'vie': 'Vietnamese', 'wel': 'Welsh', 'wen': 'Sorbian languages',
+    'zhc': 'Chinese (Cantonese)', 'zhe': 'Chinese bilingual', 'zht': 'Chinese (traditional)'
+};
+
+const languageOptions = Object.entries(languageMap).map(([code, name]) => `${name} [${code}]`);
+
 // OpenSubtitles API base URL
 const OPENSUBS_API_URL = 'https://rest.opensubtitles.org';
 
@@ -48,20 +74,37 @@ const builder = new addonBuilder({
             key: 'mainLang',
             type: 'select',
             title: 'Main Language (Audio Language)',
-            options: ['abk','afr','alb','amh','ara','arg','arm','asm','ast','azb','aze','baq','bel','ben','bos','bre','bul','bur','cat','chi','cze','dan','dut','ell','eng','epo','est','ext','fin','fre','geo','ger','gla','gle','glg','heb','hin','hrv','hun','ibo','ice','ina','ind','ita','jpn','kan','kaz','khm','kir','kor','kur','lav','lit','ltz','mac','mal','mar','may','mne','mni','mon','nav','nep','nor','oci','ori','per','pob','pol','pom','por','prs','pus','rum','rus','sat','scc','sin','slo','slv','sme','snd','som','spa','spl','spn','swa','swe','syr','tam','tat','tel','tet','tgl','tha','tok','tuk','tur','ukr','urd','uzb','vie','wel','wen','zhc','zhe','zht'],
+            options: languageOptions,
             required: true,
-            default: 'eng'
+            default: 'English [eng]'
         },
         {
             key: 'transLang',
             type: 'select',
             title: 'Translation Language (Your Language)',
-            options: ['abk','afr','alb','amh','ara','arg','arm','asm','ast','azb','aze','baq','bel','ben','bos','bre','bul','bur','cat','chi','cze','dan','dut','ell','eng','epo','est','ext','fin','fre','geo','ger','gla','gle','glg','heb','hin','hrv','hun','ibo','ice','ina','ind','ita','jpn','kan','kaz','khm','kir','kor','kur','lav','lit','ltz','mac','mal','mar','may','mne','mni','mon','nav','nep','nor','oci','ori','per','pob','pol','pom','por','prs','pus','rum','rus','sat','scc','sin','slo','slv','sme','snd','som','spa','spl','spn','swa','swe','syr','tam','tat','tel','tet','tgl','tha','tok','tuk','tur','ukr','urd','uzb','vie','wel','wen','zhc','zhe','zht'],
+            options: languageOptions,
             required: true,
-            default: 'tur'
+            default: 'Turkish [tur]'
         }
     ]
 });
+
+// Helper to parse language code from "Language Name [code]" (new) or "Language Name (code)" (legacy) formats.
+function parseLangCode(lang) {
+    if (!lang) {
+        return lang;
+    }
+
+    // Try new format: "Language [code]"
+    let match = lang.match(/\[([^\]]+)\]$/);
+    if (match) {
+        return match[1];
+    }
+
+
+    // If no match, assume it's already a code (e.g., "eng" from original configs)
+    return lang;
+}
 
 // Reset the rate limit counter every minute
 function setupRateLimitReset() {
@@ -625,8 +668,11 @@ process.on('SIGINT', () => {
             // ---------------------------------------------------
 
             // Get selected languages from config, with defaults
-            const mainLang = config?.mainLang || 'eng';
-            const transLang = config?.transLang || 'tur';
+            const mainLangRaw = config?.mainLang || 'eng';
+            const transLangRaw = config?.transLang || 'tur';
+
+            const mainLang = parseLangCode(mainLangRaw);
+            const transLang = parseLangCode(transLangRaw);
 
             console.log(`Selected Languages: Main=${mainLang}, Translation=${transLang}`);
 
