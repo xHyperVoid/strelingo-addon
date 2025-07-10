@@ -35,6 +35,7 @@ const languageMap = {
     'zhc': 'Chinese (Cantonese)', 'zhe': 'Chinese bilingual', 'zht': 'Chinese (traditional)'
 };
 
+
 const languageOptions = Object.entries(languageMap).map(([code, name]) => `${name} [${code}]`);
 
 // OpenSubtitles API base URL
