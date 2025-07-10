@@ -89,20 +89,17 @@ const builder = new addonBuilder({
     ]
 });
 
-// Helper to parse language code from "Language Name [code]" (new) or "Language Name (code)" (legacy) formats.
 function parseLangCode(lang) {
     if (!lang) {
         return lang;
     }
 
-    // Try new format: "Language [code]"
     let match = lang.match(/\[([^\]]+)\]$/);
     if (match) {
         return match[1];
     }
 
 
-    // If no match, assume it's already a code (e.g., "eng" from original configs)
     return lang;
 }
 
