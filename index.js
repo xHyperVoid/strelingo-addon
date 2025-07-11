@@ -2,6 +2,7 @@
 
 const { addonBuilder, serveHTTP } = require('stremio-addon-sdk');
 const axios = require('axios');
+const cloudscraper = require('cloudscraper');
 const pako = require('pako');
 const { Buffer } = require('buffer');
 const chardet = require('chardet');
@@ -262,15 +263,12 @@ async function fetchAndSelectSubtitle(languageId, baseSearchParams, type) {
 async function fetchSubtitleContent(url, sourceFormat = 'srt') {
     console.log(`Fetching subtitle content from: ${url}`);
     try {
-        const response = await axios.get(url, {
-            responseType: 'arraybuffer', // Important for binary data
+        const contentBuffer = await cloudscraper.get({
+            uri: url,
+            encoding: null, // Get body as a buffer
             timeout: 15000,
-            headers: {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36'
-            }
         });
 
-        let contentBuffer = Buffer.from(response.data);
         let subtitleText;
 
         // 1. Handle Gzip decompression first
