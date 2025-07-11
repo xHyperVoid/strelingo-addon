@@ -264,7 +264,10 @@ async function fetchSubtitleContent(url, sourceFormat = 'srt') {
     try {
         const response = await axios.get(url, {
             responseType: 'arraybuffer', // Important for binary data
-            timeout: 15000
+            timeout: 15000,
+            headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36'
+            }
         });
 
         let contentBuffer = Buffer.from(response.data);
