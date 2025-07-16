@@ -261,13 +261,13 @@ async function fetchAndSelectSubtitle(languageId, baseSearchParams, type) {
 let openSubtitlesCookie = null; // Cache for the cookie to be used across requests
 
 // Fetches a session cookie from opensubtitles.org to help with Cloudflare
-async function refreshOpensubtitlesCookie() {
-    if (openSubtitlesCookie) {
+async function refreshOpensubtitlesCookie(force = false) {
+    if (openSubtitlesCookie && !force) {
         console.log('Using cached OpenSubtitles cookie.');
         return openSubtitlesCookie;
     }
 
-    console.log('Attempting to fetch fresh cookies from OpenSubtitles...');
+    console.log(force ? 'Forcing cookie refresh...' : 'Attempting to fetch fresh cookies from OpenSubtitles...');
     try {
         const response = await axios.get('https://www.opensubtitles.org/en/search/subs', {
             // Use a minimal set of headers, we just want the cookie
@@ -296,7 +296,7 @@ async function refreshOpensubtitlesCookie() {
 
 
 // Fetches subtitle content from URL, handles potential gzip and encoding
-async function fetchSubtitleContent(url, sourceFormat = 'srt', cookie = null) {
+async function fetchSubtitleContent(url, sourceFormat = 'srt', cookie = null, isRetry = false) {
     console.log(`Fetching subtitle content from: ${url}`);
     try {
         const headers = {
@@ -465,6 +465,14 @@ async function fetchSubtitleContent(url, sourceFormat = 'srt', cookie = null) {
         return subtitleText;
 
     } catch (error) {
+        // If we get a 403, our cookie might be stale. Try refreshing it and retry once.
+        if (error.response && (error.response.status === 403 || error.response.status === 404) && !isRetry) {
+            console.warn(`Got ${error.response.status} error for ${url}. Forcing cookie refresh and retrying once...`);
+            const newCookie = await refreshOpensubtitlesCookie(true); // Force refresh
+            return await fetchSubtitleContent(url, sourceFormat, newCookie, true); // Retry
+        }
+
+
         console.error(`Error fetching subtitle content from ${url}:`, error.message);
         if (error.response) {
             console.error(`Status: ${error.response.status}, Headers: ${JSON.stringify(error.response.headers)}`);
