@@ -264,7 +264,7 @@ let openSubtitlesCookie = null; // Cache for the cookie to be used across reques
 async function refreshOpensubtitlesCookie() {
     console.log('Attempting to fetch fresh cookies from OpenSubtitles...');
     try {
-        const response = await axios.get('https://www.opensubtitles.org/en/search', {
+        const response = await axios.get('https://www.opensubtitles.org/en/search/subs', {
             // Use a minimal set of headers, we just want the cookie
             headers: {
                  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:140.0) Gecko/20100101 Firefox/140.0',
