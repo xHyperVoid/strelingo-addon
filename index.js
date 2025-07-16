@@ -262,6 +262,11 @@ let openSubtitlesCookie = null; // Cache for the cookie to be used across reques
 
 // Fetches a session cookie from opensubtitles.org to help with Cloudflare
 async function refreshOpensubtitlesCookie() {
+    if (openSubtitlesCookie) {
+        console.log('Using cached OpenSubtitles cookie.');
+        return openSubtitlesCookie;
+    }
+
     console.log('Attempting to fetch fresh cookies from OpenSubtitles...');
     try {
         const response = await axios.get('https://www.opensubtitles.org/en/search/subs', {
