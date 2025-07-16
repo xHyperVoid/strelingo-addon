@@ -258,24 +258,62 @@ async function fetchAndSelectSubtitle(languageId, baseSearchParams, type) {
 
 // --- SRT Parsing and Merging Helpers ---
 
+let openSubtitlesCookie = null; // Cache for the cookie to be used across requests
+
+// Fetches a session cookie from opensubtitles.org to help with Cloudflare
+async function refreshOpensubtitlesCookie() {
+    console.log('Attempting to fetch fresh cookies from OpenSubtitles...');
+    try {
+        const response = await axios.get('https://www.opensubtitles.org/en/search', {
+            // Use a minimal set of headers, we just want the cookie
+            headers: {
+                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:140.0) Gecko/20100101 Firefox/140.0',
+            },
+            timeout: 10000
+        });
+
+        const cookies = response.headers['set-cookie'];
+        if (cookies && cookies.length > 0) {
+            // We only care about the part before the first semicolon for each cookie
+            const cookieString = cookies.map(c => c.split(';')[0]).join('; ');
+            openSubtitlesCookie = cookieString;
+            console.log('Successfully refreshed OpenSubtitles cookie.');
+        } else {
+            console.warn('Did not receive any set-cookie header from opensubtitles.org.');
+        }
+    } catch (error) {
+        console.error('Failed to fetch cookies from OpenSubtitles:', error.message);
+        // Don't nullify cookie if request fails, might have a valid old one that still works
+    }
+    return openSubtitlesCookie; // Return the new or cached cookie
+}
+
+
 // Fetches subtitle content from URL, handles potential gzip and encoding
-async function fetchSubtitleContent(url, sourceFormat = 'srt') {
+async function fetchSubtitleContent(url, sourceFormat = 'srt', cookie = null) {
     console.log(`Fetching subtitle content from: ${url}`);
     try {
+        const headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:140.0) Gecko/20100101 Firefox/140.0',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+            'Accept-Language': 'en-US;q=0.5,en;q=0.3',
+            'DNT': '1',
+            'Upgrade-Insecure-Requests': '1',
+            'Sec-Fetch-Dest': 'document',
+            'Sec-Fetch-Mode': 'navigate',
+            'Sec-Fetch-Site': 'none',
+            'Sec-Fetch-User': '?1'
+        };
+
+        if (cookie) {
+            headers['Cookie'] = cookie;
+            console.log(`Using cookie for subtitle download.`);
+        }
+
         const response = await axios.get(url, {
             responseType: 'arraybuffer', // Important for binary data
             timeout: 15000,
-            headers: {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:140.0) Gecko/20100101 Firefox/140.0',
-                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-                'Accept-Language': 'en-US;q=0.5,en;q=0.3',
-                'DNT': '1',
-                'Upgrade-Insecure-Requests': '1',
-                'Sec-Fetch-Dest': 'document',
-                'Sec-Fetch-Mode': 'navigate',
-                'Sec-Fetch-Site': 'none',
-                'Sec-Fetch-User': '?1'
-            }
+            headers: headers
         });
 
         let contentBuffer = Buffer.from(response.data);
@@ -669,6 +707,13 @@ process.on('SIGINT', () => {
             console.log('Strelingo Subtitle request:', { type, id, extra });
             console.log('Config:', config);
 
+            // --- Get Cookie ---
+            const cookie = await refreshOpensubtitlesCookie();
+            if (!cookie) {
+                 console.warn("Could not obtain a cookie. Downloads may fail due to Cloudflare protection.");
+            }
+            // --------------------
+
             // --- Add Environment Variable for Skipping Vercel ---
             const skipVercelBlob = process.env.SKIP_VERCEL_BLOB === 'true';
             if (skipVercelBlob) {
@@ -761,7 +806,7 @@ process.on('SIGINT', () => {
                 for (const mainSubInfo of mainSubInfoList) {
                     console.log(`Attempting to process main subtitle: ID=${mainSubInfo.id}, Downloads=${mainSubInfo.downloads}`);
                     
-                    const mainSubContent = await fetchSubtitleContent(mainSubInfo.url, mainSubInfo.format);
+                    const mainSubContent = await fetchSubtitleContent(mainSubInfo.url, mainSubInfo.format, cookie);
                     if (!mainSubContent) {
                         console.warn(`Failed to fetch content for main sub ID ${mainSubInfo.id}. Trying next candidate.`);
                         continue;
@@ -794,7 +839,7 @@ process.on('SIGINT', () => {
                     console.log(`Processing translation candidate v${version} (ID: ${transSubInfo.id})...`);
 
                     // Fetch content
-                    const transSubContent = await fetchSubtitleContent(transSubInfo.url, transSubInfo.format);
+                    const transSubContent = await fetchSubtitleContent(transSubInfo.url, transSubInfo.format, cookie);
                     if (!transSubContent) {
                         console.warn(`Failed to fetch content for translation v${version}. Skipping.`);
                         continue; // Skip to next candidate
