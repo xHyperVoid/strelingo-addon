@@ -278,6 +278,7 @@ async function refreshOpensubtitlesCookie() {
             const cookieString = cookies.map(c => c.split(';')[0]).join('; ');
             openSubtitlesCookie = cookieString;
             console.log('Successfully refreshed OpenSubtitles cookie.');
+            console.log('Cookie:', cookieString);
         } else {
             console.warn('Did not receive any set-cookie header from opensubtitles.org.');
         }
