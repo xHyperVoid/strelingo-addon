@@ -279,8 +279,8 @@ async function refreshOpensubtitlesCookie(force = false) {
 
         const cookies = response.headers['set-cookie'];
         if (cookies && cookies.length > 0) {
-            // Join the raw cookie strings as they are provided.
-            const cookieString = cookies.join('; ');
+            // We only care about the part before the first semicolon for each cookie
+            const cookieString = cookies.map(c => c.split(';')[0]).join('; ');
             openSubtitlesCookie = cookieString;
             console.log('Successfully refreshed OpenSubtitles cookie.');
             console.log('Cookie:', cookieString);
