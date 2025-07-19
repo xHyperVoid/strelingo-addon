@@ -90,11 +90,3 @@ The addon is now installed and configured with your chosen languages.
 *   **Gzip Decompression:** `pako`
 *   **Character Encoding Detection:** `chardet`
 *   **Character Encoding Decoding:** `iconv-lite`
-
-## Troubleshooting
-
-*   **Incorrect Characters:** If special characters (like ş, ı, ç, ü) are still displayed incorrectly, check the console logs when running `npm start`. Look for messages related to encoding detection (`chardet raw detection`) and decoding (`Successfully decoded subtitle...`). This might indicate an unsupported or incorrectly detected encoding for a specific file.
-*   **No Subtitles Found:** Ensure the movie/series exists on OpenSubtitles and has subtitles available in your selected languages. Network issues or OpenSubtitles API rate limits could also be a factor.
-*   **Installation Issues:** If `npm install` fails, check your Node.js and npm/yarn installation and network connection. If the problem persists, check the specific error messages.
-
-
