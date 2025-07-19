@@ -41,7 +41,6 @@ or visit the addon page here:
 *   If you want vercel blob create a vercel blob in vercel and copy the token and put it in your env named BLOB_READ_WRITE_TOKEN
 *   If you want supabase storage instead of vercel you will need to copy SUPABASE_URL, SUPABASE_SERVICE_KEY, SUPABASE_ANON_KEY credentials from your supabase account.
 
-
 ## Local Setup
 
 1.  **Clone the repository:**
