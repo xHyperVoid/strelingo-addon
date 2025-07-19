@@ -28,7 +28,7 @@ or visit the addon page here:
 *   Handles Gzip compressed subtitles.
 *   Detects and decodes various character encodings (using `chardet` and `iconv-lite`) to support languages with special characters.
 *   Merges the main language and translation language subtitles into a single `.srt` file.
-*   Formats the translation line to be *italic* and <font color="yellow">yellow</font> (configurable in `index.js`).
+*   Formats the translation line to be *italic* and <font color="yellow">yellow</font> (yellow color doesnt work due to stremio overriding the color of subtitles).
 *   Configurable via Stremio addon settings for:
     *   Main Language (Audio Language)
     *   Translation Language (Your Language)
