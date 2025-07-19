@@ -28,11 +28,10 @@ or visit the addon page here:
 *   Handles Gzip compressed subtitles.
 *   Detects and decodes various character encodings (using `chardet` and `iconv-lite`) to support languages with special characters.
 *   Merges the main language and translation language subtitles into a single `.srt` file.
-*   Formats the translation line to be *italic* and <font color="yellow">yellow</font> (configurable in `index.js`).
+*   Formats the translation line to be *italic* and <font color="yellow">yellow</font> (yellow color doesnt work due to stremio overriding the color of subtitles).
 *   Configurable via Stremio addon settings for:
     *   Main Language (Audio Language)
     *   Translation Language (Your Language)
-*   Includes basic rate limiting to comply with OpenSubtitles API limits.
 
 ## Requirements
 
@@ -41,7 +40,6 @@ or visit the addon page here:
 *   You will need either vercel blob key or supabase storage credentials. Because the addon creates a brand new srt everytime and it has to host somewhere. you can put those credentials in .env (You can techinally return the subtitle as base64 but i have found that it only works for stremio 4 version, it didnt worked in stremio 5 or mobile stremio)
 *   If you want vercel blob create a vercel blob in vercel and copy the token and put it in your env named BLOB_READ_WRITE_TOKEN
 *   If you want supabase storage instead of vercel you will need to copy SUPABASE_URL, SUPABASE_SERVICE_KEY, SUPABASE_ANON_KEY credentials from your supabase account.
-
 
 ## Local Setup
 
@@ -90,11 +88,3 @@ The addon is now installed and configured with your chosen languages.
 *   **Gzip Decompression:** `pako`
 *   **Character Encoding Detection:** `chardet`
 *   **Character Encoding Decoding:** `iconv-lite`
-
-## Troubleshooting
-
-*   **Incorrect Characters:** If special characters (like ş, ı, ç, ü) are still displayed incorrectly, check the console logs when running `npm start`. Look for messages related to encoding detection (`chardet raw detection`) and decoding (`Successfully decoded subtitle...`). This might indicate an unsupported or incorrectly detected encoding for a specific file.
-*   **No Subtitles Found:** Ensure the movie/series exists on OpenSubtitles and has subtitles available in your selected languages. Network issues or OpenSubtitles API rate limits could also be a factor.
-*   **Installation Issues:** If `npm install` fails, check your Node.js and npm/yarn installation and network connection. If the problem persists, check the specific error messages.
-
-
