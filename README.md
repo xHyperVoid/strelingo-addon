@@ -32,7 +32,6 @@ or visit the addon page here:
 *   Configurable via Stremio addon settings for:
     *   Main Language (Audio Language)
     *   Translation Language (Your Language)
-*   Includes basic rate limiting to comply with OpenSubtitles API limits.
 
 ## Requirements
 
