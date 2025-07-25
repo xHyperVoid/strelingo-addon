@@ -2,7 +2,6 @@
 
 const { addonBuilder, serveHTTP } = require('stremio-addon-sdk');
 const axios = require('axios');
-const cloudscraper = require('cloudscraper');
 const pako = require('pako');
 const { Buffer } = require('buffer');
 const chardet = require('chardet');
@@ -263,14 +262,12 @@ async function fetchAndSelectSubtitle(languageId, baseSearchParams, type) {
 async function fetchSubtitleContent(url, sourceFormat = 'srt') {
     console.log(`Fetching subtitle content from: ${url}`);
     try {
-        // Use cloudscraper for the download request to handle Cloudflare
-        const subtitleBuffer = await cloudscraper.get({
-            uri: url,
-            encoding: null, // We want the raw buffer
-            timeout: 20000
+        const response = await axios.get(url, {
+            responseType: 'arraybuffer', // Important for binary data
+            timeout: 15000
         });
 
-        let contentBuffer = Buffer.from(subtitleBuffer);
+        let contentBuffer = Buffer.from(response.data);
         let subtitleText;
 
         // 1. Handle Gzip decompression first
@@ -413,11 +410,9 @@ async function fetchSubtitleContent(url, sourceFormat = 'srt') {
         return subtitleText;
 
     } catch (error) {
-        // Cloudscraper might throw a string error for Cloudflare challenges
-        const errorMessage = error.message || (typeof error === 'string' ? error : 'Unknown error');
-        console.error(`Error fetching subtitle content from ${url}:`, errorMessage);
-        if (error.statusCode) {
-             console.error(`Status: ${error.statusCode}`);
+        console.error(`Error fetching subtitle content from ${url}:`, error.message);
+        if (error.response) {
+            console.error(`Status: ${error.response.status}, Headers: ${JSON.stringify(error.response.headers)}`);
         }
         return null;
     }

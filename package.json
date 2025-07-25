@@ -16,8 +16,7 @@
     "@vercel/blob": "^1.0.1",
     "@supabase/supabase-js": "^2.49.4",
     "subtitle-converter": "^3.0.12",
-    "subsrt": "^1.1.1",
-    "cloudscraper": "^4.6.0"
+    "subsrt": "^1.1.1"
   },
   "engines": {
     "node": ">=14"
