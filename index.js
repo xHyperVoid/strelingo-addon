@@ -563,11 +563,11 @@ function mergeSubtitles(mainSubs, transSubs, mergeThresholdMs = 500) {
             }
         }
 
-        // Process the best match found (if any)
+        // Flatten main text by replacing newlines with spaces
+        const flatMainText = mainSub.text.replace(/\r?\n|\r/g, ' ');
         if (bestMatchIndex !== -1) {
             const bestTransSub = transSubs[bestMatchIndex];
-            // Flatten both main and translation text by replacing newlines with spaces
-            const flatMainText = mainSub.text.replace(/\r?\n|\r/g, ' ');
+            // Flatten translation text by replacing newlines with spaces
             const flatTransText = bestTransSub.text.replace(/\r?\n|\r/g, ' ');
 
             mergedSubs.push({
@@ -579,7 +579,7 @@ function mergeSubtitles(mainSubs, transSubs, mergeThresholdMs = 500) {
             // If no suitable translation match found, add the main subtitle as is (also flattened)
             mergedSubs.push({
                  ...mainSub,
-                 text: mainSub.text.replace(/\r?\n|\r/g, ' ')
+                 text: flatMainText
             });
         }
     }
