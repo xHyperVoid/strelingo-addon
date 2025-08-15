@@ -10,6 +10,7 @@ const { put } = require('@vercel/blob');
 const { createClient } = require('@supabase/supabase-js');
 const { convert: convertWithSubtitleConverter } = require('subtitle-converter');
 const subsrt = require('subsrt');
+const sanitize = require('sanitize-html');
 
 const languageMap = {
     'abk': 'Abkhazian', 'afr': 'Afrikaans', 'alb': 'Albanian', 'amh': 'Amharic', 'ara': 'Arabic',
@@ -319,7 +320,8 @@ async function fetchSubtitleContent(url, sourceFormat = 'srt', cookie = null, is
         const response = await axios.get(url, {
             responseType: 'arraybuffer', // Important for binary data
             timeout: 15000,
-            headers: headers
+            headers: headers,
+            maxContentLength: 5 * 1024 * 1024  // 5 MB limit
         });
 
         let contentBuffer = Buffer.from(response.data);
@@ -563,17 +565,30 @@ function mergeSubtitles(mainSubs, transSubs, mergeThresholdMs = 500) {
             }
         }
 
+       
+        console.log("Before main sanitize:", mainSub.text.substring(0, 50));
+        const cleanMainText = sanitize(mainSub.text, {
+            allowedTags: [],      // No tags allowed
+            allowedAttributes: {} // No attributes allowed
+        });
+        console.log("After main sanitize:", cleanMainText.substring(0, 50));
         // Flatten main text by replacing newlines with spaces
-        const flatMainText = mainSub.text.replace(/\r?\n|\r/g, ' ');
+        const flatMainText = cleanMainText.replace(/\r?\n|\r/g, ' ');
         if (bestMatchIndex !== -1) {
             const bestTransSub = transSubs[bestMatchIndex];
+            console.log("Before trans sanitize:", bestTransSub.text.substring(0, 50));
+            const cleanTransText = sanitize(bestTransSub.text, {
+                allowedTags: [],
+                allowedAttributes: {}
+            });
+            console.log("After trans sanitize:", cleanTransText.substring(0, 50));
             // Flatten translation text by replacing newlines with spaces
-            const flatTransText = bestTransSub.text.replace(/\r?\n|\r/g, ' ');
+            const flatTransText = cleanTransText.replace(/\r?\n|\r/g, ' ');
 
             mergedSubs.push({
                 ...mainSub, // Keep main timing and ID
-                // Combine flattened texts with a newline, keeping translation italic and yellow
-                text: `${flatMainText}\n<font color="yellow"><i>${flatTransText}</i></font>`
+                // Combine flattened texts with a newline, keeping translation italic
+                text: `${flatMainText}\n<i>${flatTransText}</i>`
             });
         } else {
             // If no suitable translation match found, add the main subtitle as is (also flattened)
