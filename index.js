@@ -566,22 +566,22 @@ function mergeSubtitles(mainSubs, transSubs, mergeThresholdMs = 500) {
         }
 
        
-        console.log("Before main sanitize:", mainSub.text.substring(0, 50));
+        // console.log("Before main sanitize:", mainSub.text.substring(0, 50));
         const cleanMainText = sanitize(mainSub.text, {
             allowedTags: [],      // No tags allowed
             allowedAttributes: {} // No attributes allowed
         });
-        console.log("After main sanitize:", cleanMainText.substring(0, 50));
+        // console.log("After main sanitize:", cleanMainText.substring(0, 50));
         // Flatten main text by replacing newlines with spaces
         const flatMainText = cleanMainText.replace(/\r?\n|\r/g, ' ');
         if (bestMatchIndex !== -1) {
             const bestTransSub = transSubs[bestMatchIndex];
-            console.log("Before trans sanitize:", bestTransSub.text.substring(0, 50));
+            // console.log("Before trans sanitize:", bestTransSub.text.substring(0, 50));
             const cleanTransText = sanitize(bestTransSub.text, {
                 allowedTags: [],
                 allowedAttributes: {}
             });
-            console.log("After trans sanitize:", cleanTransText.substring(0, 50));
+            // console.log("After trans sanitize:", cleanTransText.substring(0, 50));
             // Flatten translation text by replacing newlines with spaces
             const flatTransText = cleanTransText.replace(/\r?\n|\r/g, ' ');
 
