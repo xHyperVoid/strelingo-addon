@@ -900,7 +900,6 @@ process.on('SIGINT', () => {
                     // --- Conditional Upload Logic --- 
                     let uploadedToVercel = false;
                     let uploadUrl = null;
-                    let subtitleEntryId = `merged-${selectedMainSubInfo.id}-${transSubInfo.id}`; // Use the ID of the successfully fetched main sub
 
                     // Attempt Vercel Blob upload ONLY if not skipped
                     if (!skipVercelBlob) {
@@ -917,7 +916,6 @@ process.on('SIGINT', () => {
                             console.log(`Uploaded v${version} to Vercel Blob: ${url}`);
                             uploadUrl = url;
                             uploadedToVercel = true;
-                            subtitleEntryId += '-vercel'; 
                         } catch (uploadError) {
                             console.error(`Failed to upload merged SRT for v${version} to Vercel Blob: ${uploadError.message}`);
                             // Do not throw, proceed to check Supabase fallback
@@ -952,7 +950,6 @@ process.on('SIGINT', () => {
                             } else {
                                 uploadUrl = publicUrlData.publicUrl;
                                 console.log(`Uploaded v${version} to Supabase: ${uploadUrl}`);
-                                subtitleEntryId += '-supabase'; 
                             }
                         } catch (supabaseUploadError) {
                             console.error(`Supabase Storage upload failed for v${version}: ${supabaseUploadError.message}`);
@@ -966,17 +963,33 @@ process.on('SIGINT', () => {
                          console.log(`Upload for v${version} completed via Supabase (Vercel was skipped).`);
                     } // Else: Vercel succeeded, no need for Supabase.
                     
+
+                    // =================================================================
+                    // ========= START: MODIFICATION FOR CUSTOM DISPLAY NAME ===========
+                    // =================================================================
+                    
                     // Add to results if an upload was successful
                     if (uploadUrl) {
+                         // Get the full, human-readable name of the translation language
+                         const transLangName = languageMap[transLang] || transLang;
+
                          finalSubtitles.push({
-                             id: subtitleEntryId,
+                             // Set the ID to the desired variant name. Adding the version number
+                             // ensures the ID is unique if you generate multiple options.
+                             id: `${transLangName} DualSubs v${version}`,
+                             
                              url: uploadUrl,
-                             lang: `${mainLang}+${transLang}`
+                             
+                             // Set the lang to the main language to group it correctly.
+                             lang: mainLang
                          });
                     } else {
                          console.warn(`Failed to upload v${version} to either Vercel Blob or Supabase Storage.`);
                     }
-                    // --- End Conditional Upload Logic ---
+                    
+                    // =================================================================
+                    // ========== END: MODIFICATION FOR CUSTOM DISPLAY NAME ============
+                    // =================================================================
                 }
 
                 // 5. Return results
@@ -1005,4 +1018,4 @@ process.on('SIGINT', () => {
     }
 })();
 
-console.log("Addon script initialized. Waiting for ESM import and server start..."); // Log outside IIFE 
+console.log("Addon script initialized. Waiting for ESM import and server start...");
